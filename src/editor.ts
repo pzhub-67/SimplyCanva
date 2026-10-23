@@ -2,10 +2,12 @@
 // plus built-in looks and your own saved presets (Lightroom-style, with an Amount slider).
 import { fabric } from 'fabric';
 import { makeAdjustFilter } from './adjust';
+import { initCropper, renderCropped } from './crop';
 import { ADJ, AdjKey, BUILTIN, PhotoEdit, Preset, effective, isEdited, isNeutral } from './photoModel';
 
-export type PhotoImage = fabric.Image & { edit?: PhotoEdit };
-interface Deps { c: fabric.Canvas; commit: () => void; toast: (msg: string) => void }
+// `orig` holds the untouched photo once a crop has been applied, so the crop can be re-edited or undone.
+export type PhotoImage = fabric.Image & { edit?: PhotoEdit; orig?: { src: string } };
+interface Deps { c: fabric.Canvas; commit: () => void; toast: (msg: string) => void; pageRatio: () => number }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const all = <T extends HTMLElement = HTMLElement>(sel: string) => [...document.querySelectorAll<T>(sel)];
@@ -24,10 +26,42 @@ export const applyEdit = (img: PhotoImage, e: PhotoEdit | undefined) => {
   img.applyFilters();
 };
 
-export function initEditor({ c, commit, toast }: Deps) {
-  const s = { img: null as PhotoImage | null, before: undefined as PhotoEdit | undefined, work: { adj: {} } as PhotoEdit, key: 'exposure' as AdjKey };
+const setSrc = (img: fabric.Image, url: string) => new Promise<void>(res => { img.setSrc(url, () => res()); });
+
+export function initEditor({ c, commit, toast, pageRatio }: Deps) {
+  const s = {
+    img: null as PhotoImage | null, before: undefined as PhotoEdit | undefined, work: { adj: {} } as PhotoEdit, key: 'exposure' as AdjKey,
+    baked: undefined as PhotoEdit['crop'], // crop currently applied to the pixels on canvas
+    src0: '', orig0: undefined as PhotoImage['orig'], center0: new fabric.Point(0, 0), // state at open, for Cancel
+  };
+  const cropper = initCropper(pageRatio);
   let clip: PhotoEdit | undefined;
   let raf = 0;
+
+  // Make the pixels on canvas match work.crop. The original is kept so a crop can be redone or removed.
+  const syncGeometry = async () => {
+    const img = s.img;
+    if (!img || JSON.stringify(s.work.crop ?? null) === JSON.stringify(s.baked ?? null)) return;
+    const center = img.getCenterPoint();
+    if (s.work.crop) {
+      const original = img.orig?.src ?? img.getSrc();
+      const url = await renderCropped(original, s.work.crop);
+      img.orig = img.orig ?? { src: original };
+      await setSrc(img, url);
+    } else if (img.orig) {
+      await setSrc(img, img.orig.src);
+      img.orig = undefined;
+    }
+    img.setPositionByOrigin(center, 'center', 'center'); img.setCoords();
+    s.baked = clone(s.work.crop);
+    render();
+  };
+  const leaveCrop = async () => {
+    if (!cropper.isOpen()) return;
+    s.work.crop = cropper.read();
+    cropper.end();
+    await syncGeometry();
+  };
 
   const render = () => { if (s.img) { applyEdit(s.img, s.work); c.requestRenderAll(); } };
   const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); };
@@ -100,26 +134,30 @@ export function initEditor({ c, commit, toast }: Deps) {
     amount.value = String(s.work.filter?.amount ?? 100);
     $('amt-val').textContent = String(s.work.filter?.amount ?? 100);
     paintMine();
-    $('ed-revert').toggleAttribute('disabled', isNeutral(p));
+    $('ed-revert').toggleAttribute('disabled', !isEdited(s.work) && tab !== 'crop');
   }
 
   let tab = 'adjust';
-  const showTab = (name: string) => {
+  const showTab = async (name: string) => {
+    if (tab === 'crop' && name !== 'crop') await leaveCrop();
     tab = name;
     all('[data-ed-tab]').forEach(t => t.setAttribute('aria-pressed', String(t.dataset.edTab === name)));
     all('[data-ed-panel]').forEach(p => { p.hidden = p.dataset.edPanel !== name; });
     paint();
+    if (name === 'crop' && s.img) await cropper.begin(s.img.orig?.src ?? s.img.getSrc(), s.work.crop);
   };
-  all('[data-ed-tab]').forEach(t => { t.onclick = () => showTab(t.dataset.edTab!); });
+  all('[data-ed-tab]').forEach(t => { t.onclick = () => { void showTab(t.dataset.edTab!); }; });
 
   // --- open / close ---
   const open = (img: PhotoImage) => {
     c.discardActiveObject();
     c.skipTargetFind = true; c.selection = false;
     s.img = img; s.before = clone(img.edit); s.work = clone(img.edit) ?? { adj: {} };
+    s.baked = clone(img.edit?.crop); s.src0 = img.getSrc(); s.orig0 = clone(img.orig); s.center0 = img.getCenterPoint();
     document.body.dataset.editing = '1';
     $('editor').hidden = false;
-    showTab('adjust');
+    tab = 'adjust';
+    void showTab('adjust');
   };
   const close = () => {
     const img = s.img;
@@ -131,20 +169,33 @@ export function initEditor({ c, commit, toast }: Deps) {
   };
   const norm = (e?: PhotoEdit) => JSON.stringify(isEdited(e) ? e : null);
 
-  $('ed-done').onclick = () => {
+  $('ed-done').onclick = async () => {
     const img = s.img;
     if (!img) return;
+    await leaveCrop();
+    await syncGeometry();
     const changed = norm(s.work) !== norm(s.before);
     img.edit = isEdited(s.work) ? clone(s.work) : undefined;
     render(); close();
     if (changed) commit();
   };
-  $('ed-cancel').onclick = () => {
+  $('ed-cancel').onclick = async () => {
     const img = s.img;
     if (!img) return;
+    cropper.end();
+    if (JSON.stringify(s.baked ?? null) !== JSON.stringify(s.before?.crop ?? null)) { // undo a crop applied during this session
+      await setSrc(img, s.src0);
+      img.orig = s.orig0;
+      img.setPositionByOrigin(s.center0, 'center', 'center'); img.setCoords();
+    }
     applyEdit(img, s.before); close();
   };
-  $('ed-revert').onclick = () => { s.work = { adj: {} }; paint(); schedule(); toast('Back to the original. Press Done to keep it, or Cancel.'); };
+  $('ed-revert').onclick = () => {
+    s.work = { adj: {} };
+    if (cropper.isOpen()) cropper.reset(); else void syncGeometry();
+    paint(); schedule();
+    toast('Back to the original. Press Done to keep it, or Cancel.');
+  };
 
   // Hold to compare with the original.
   const cmp = $('ed-compare');
@@ -168,13 +219,18 @@ export function initEditor({ c, commit, toast }: Deps) {
   $('adj-reset').onclick = resetKey;
 
   // --- copy / paste edits between photos ---
+  // Sliders and looks travel between photos; a crop belongs to its own photo.
   const copyEdits = (img: PhotoImage) => {
-    clip = clone(img.edit) ?? { adj: {} };
-    toast(isEdited(clip) ? 'Edits copied. Select photos and tap Paste edits.' : 'That photo has no edits to copy.');
+    clip = { ...clone(img.edit), adj: clone(img.edit?.adj) ?? {}, crop: undefined };
+    toast(isEdited(clip) ? 'Edits copied. Select photos and tap Paste edits.' : 'That photo has no adjustments to copy.');
   };
   const pasteEdits = (imgs: PhotoImage[]) => {
     if (!clip) { toast('Copy edits from a photo first.'); return; }
-    imgs.forEach(img => { img.edit = isEdited(clip) ? clone(clip) : undefined; applyEdit(img, img.edit); });
+    imgs.forEach(img => {
+      const next: PhotoEdit = { ...clone(clip!), crop: img.edit?.crop };
+      img.edit = isEdited(next) ? next : undefined;
+      applyEdit(img, img.edit);
+    });
     c.requestRenderAll(); commit();
     toast(imgs.length > 1 ? `Pasted onto ${imgs.length} photos` : 'Edits pasted');
   };

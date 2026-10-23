@@ -21,7 +21,10 @@ export type AdjKey = (typeof ADJ)[number]['key'];
 export const KEYS: AdjKey[] = ADJ.map(a => a.key);
 export type Adj = Record<AdjKey, number>; // each -100..100, noiseReduction 0..100
 
-export interface PhotoEdit { adj: Partial<Adj>; filter?: { id: string; amount: number } }
+import type { CropParams } from './cropMath';
+
+// `crop` is applied to the pixels (the untouched original is kept on the image as `orig`), sliders and looks stay live params.
+export interface PhotoEdit { adj: Partial<Adj>; filter?: { id: string; amount: number }; crop?: CropParams }
 export interface Preset { id: string; name: string; adj: Partial<Adj> }
 
 export const BUILTIN: Preset[] = [
@@ -54,4 +57,4 @@ export const effective = (e: PhotoEdit | undefined, presets: Preset[]): Adj => {
 
 export const isNeutral = (a: Adj) => KEYS.every(k => a[k] === 0);
 export const isEdited = (e: PhotoEdit | undefined) =>
-  !!e && ((!!e.filter && e.filter.amount > 0) || KEYS.some(k => (e.adj[k] ?? 0) !== 0));
+  !!e && (!!e.crop || (!!e.filter && e.filter.amount > 0) || KEYS.some(k => (e.adj[k] ?? 0) !== 0));

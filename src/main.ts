@@ -68,7 +68,7 @@ const toast = (msg: string, action?: { label: string; run: () => void }) => {
 // shortcut: one autosave slot in localStorage (~5MB). Photos are downscaled on import to keep it small; move to IndexedDB or a backend when it bites.
 const readSaved = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
 const save = () => {
-  design.pages[0] = fabricToPage(design.pages[0], c.toJSON(['edit']) as unknown as FabricJSON, logical.w, logical.h);
+  design.pages[0] = fabricToPage(design.pages[0], c.toJSON(['edit', 'orig']) as unknown as FabricJSON, logical.w, logical.h);
   try { localStorage.setItem(KEY, JSON.stringify(design)); } catch { toast('Could not save: browser storage is full or blocked.'); }
 };
 let saveTimer = 0;
@@ -85,7 +85,7 @@ const syncHistory = () => {
 const snap = () => {
   if (busy) return;
   hist = hist.slice(0, pos + 1);
-  hist.push(JSON.stringify(c.toJSON(['edit'])));
+  hist.push(JSON.stringify(c.toJSON(['edit', 'orig'])));
   pos = hist.length - 1;
   syncHistory(); autosave();
 };
@@ -336,7 +336,7 @@ const exportPNG = () => {
 };
 
 // --- wiring ----------------------------------------------------------------
-const editor = initEditor({ c, commit: snap, toast });
+const editor = initEditor({ c, commit: snap, toast, pageRatio: () => logical.w / logical.h });
 const images = () => c.getActiveObjects().filter((o): o is PhotoImage => o.type === 'image');
 c.on('mouse:dblclick', e => { if (e.target?.type === 'image') editor.open(e.target as PhotoImage); });
 

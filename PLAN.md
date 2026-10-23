@@ -1,6 +1,17 @@
-# Plan v3: Open-Source Canva Clone
+# Plan v4: Open-Source Canva Clone
 
-Built against `canva-feature-reference.md`. Priorities set by the owner: **ease of use first**, **iPhone-style photo editing with Lightroom-style presets**, collaboration deprioritized.
+Built against `canva-feature-reference.md`.
+
+## Owner focuses (stated in chat, these override everything below)
+1. **Ease of use first.** Simplify before adding.
+2. **Mobile-first.** The owner currently has phone access only, so every feature must work by touch on a small screen (bottom tabs and sheets, large hit targets, no hover-only controls). Desktop is secondary for now.
+3. **Functionality focus.** Prefer features that work end to end over polish or scaffolding.
+4. **Open straight into the editor.** Never force picking a size or template on open; a blank 1080x1080 canvas is ready, and size is changeable later.
+5. **iPhone-style photo editing:** sliders, temporary preview until Done, hold to compare, revert, plus crop, rotate, flip and straighten.
+6. **Lightroom-style customizable presets:** save, name, apply with Amount, copy/paste settings across photos.
+7. **Collaboration is deprioritized** (Later / optional).
+
+Process rule: any new focus the owner states in chat is added to this list in the same session.
 
 ## Principles
 - **Ease of use beats feature count.** If a feature needs explaining, simplify it before shipping it.
@@ -60,7 +71,8 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 
 **Status**
 - Done: edit mode with all 15 sliders (one WebGL filter, params stored on the image), temporary preview with Done/Cancel, hold to compare, Revert, 10 built-in looks with Amount, saved presets (save, rename, delete, apply), copy/paste edits across selected photos, undo/redo and autosave of edits
-- Next: Crop tab (ratios, rotate, flip, straighten), filter thumbnails from the user's own photo, auto-enhance, before/after split, per-photo edit history list, preset import/export (copy/paste text, since downloads are blocked in the viewer), CPU fallback when WebGL is missing
+- Done: Crop tab with ratio chips (Free, Original, Page, 1:1, 4:5, 3:4, 16:9, 9:16), draggable frame with corner resize, rotate 90, flip H/V, straighten -45 to +45 (frame stays inside the photo), Reset; crop is re-editable because the original is kept, and it works with Cancel, Revert and undo/redo
+- Next: filter thumbnails from the user's own photo, auto-enhance, before/after split, per-photo edit history list, preset import/export (copy/paste text, since downloads are blocked in the viewer), CPU fallback when WebGL is missing
 
 **Editing (iPhone-style)**
 - Double-click an image, or tap **Edit** in its toolbar, to enter edit mode. One panel, three tabs: **Adjust**, **Filters**, **Crop**.
@@ -128,4 +140,4 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 5. **AI:** optional and off by default, so the core stays free of API costs.
 
 ## Next step
-Phase 1 layout shell (sidebar, contextual toolbar, start screen, autosave), then Phase 2 photo editor, since both drive the ease-of-use goal.
+Phase 1 and most of Phase 2 are built. Next: pinch zoom and pan on the canvas, snapping guides, group/lock, then filter thumbnails and auto-enhance.

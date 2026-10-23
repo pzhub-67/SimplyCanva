@@ -136,7 +136,9 @@
   .ed-head .tool { flex: 1; }
   #ed-compare { background: var(--hover); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   .ed-head .btn { flex: 1; }
-  .ed-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .ed-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  #crop { position: absolute; inset: 0; z-index: 4; background: var(--stage); }
+  #crop canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   .ed-tabs .tool { min-height: 40px; font-size: 14px; }
   .dial { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0; scrollbar-width: none; }
   .chip {
@@ -169,6 +171,7 @@
 
   <main id="stage">
     <canvas id="c"></canvas>
+    <div id="crop" hidden><canvas id="crop-cv" aria-label="Crop frame. Drag the corners or the middle."></canvas></div>
     <div id="toast" class="toast" role="status" hidden></div>
 
     <div id="sheet" class="sheet" hidden>
@@ -254,6 +257,7 @@
       <button class="tool" data-ed-tab="adjust" aria-pressed="true">Adjust</button>
       <button class="tool" data-ed-tab="filters" aria-pressed="false">Filters</button>
       <button class="tool" data-ed-tab="mine" aria-pressed="false">Mine</button>
+      <button class="tool" data-ed-tab="crop" aria-pressed="false">Crop</button>
     </div>
     <div data-ed-panel="adjust">
       <div id="dial" class="dial"></div>
@@ -270,6 +274,20 @@
       <div class="prow">
         <input id="preset-name" type="text" placeholder="Name this look" aria-label="Preset name" maxlength="40">
         <button class="btn" id="save-preset">Save current look</button>
+      </div>
+    </div>
+    <div data-ed-panel="crop" hidden>
+      <div id="ratios" class="dial"></div>
+      <div class="dial">
+        <button class="chip" id="crop-rot">Rotate 90°</button>
+        <button class="chip" id="crop-fh">Flip horizontal</button>
+        <button class="chip" id="crop-fv">Flip vertical</button>
+      </div>
+      <div class="slide">
+        <span class="slide-name">Straighten</span>
+        <input id="crop-deg" type="range" min="-45" max="45" step="0.5" value="0" aria-label="Straighten angle">
+        <output id="crop-deg-val">0°</output>
+        <button class="tool" id="crop-reset">Reset</button>
       </div>
     </div>
     <div id="amount" class="slide" hidden>
