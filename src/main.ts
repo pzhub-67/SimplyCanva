@@ -90,6 +90,20 @@ let pinch: { d0: number; x0: number; y0: number; z0: number; vx0: number; vy0: n
 let swallow = false; // keep ignoring touches until every finger is up
 let grab: { o: fabric.Object; left: number; top: number; sx: number; sy: number; angle: number } | null = null;
 c.on('mouse:down', e => { const o = e.target; grab = o ? { o, left: o.left ?? 0, top: o.top ?? 0, sx: o.scaleX ?? 1, sy: o.scaleY ?? 1, angle: o.angle ?? 0 } : null; });
+// One finger on empty space pans when zoomed in (when not zoomed, it draws a selection box instead).
+let hand: { x: number; y: number } | null = null;
+const point = (e: Event) => {
+  const t = (e as TouchEvent).touches?.[0] ?? (e as TouchEvent).changedTouches?.[0], m = e as MouseEvent;
+  return t ? { x: t.clientX, y: t.clientY } : { x: m.clientX, y: m.clientY };
+};
+c.on('mouse:down:before', e => { if (!e.target && vz > 1.001 && !pinch) { hand = point(e.e); c.selection = false; } });
+c.on('mouse:move', e => {
+  if (!hand) return;
+  raw._groupSelector = null;
+  const p = point(e.e);
+  vx += p.x - hand.x; vy += p.y - hand.y; hand = p; fit();
+});
+c.on('mouse:up', () => { if (hand) { hand = null; c.selection = true; } });
 const two = (t: TouchList) => {
   const r = stage.getBoundingClientRect(), a = t[0], b = t[1];
   return { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1, x: (a.clientX + b.clientX) / 2 - r.left, y: (a.clientY + b.clientY) / 2 - r.top };
@@ -614,6 +628,14 @@ const addPage = (copy: boolean) => {
   design.pages.splice(pageIdx + 1, 0, next);
   showPage(pageIdx + 1, () => { autosave(); void renderPages(); });
 };
+const movePage = (dir: -1 | 1) => {
+  const j = pageIdx + dir;
+  if (j < 0 || j >= design.pages.length) return;
+  commitPage();
+  const [pg] = design.pages.splice(pageIdx, 1);
+  design.pages.splice(j, 0, pg);
+  pageIdx = j; updatePager(); autosave(); void renderPages();
+};
 const deletePage = () => {
   if (design.pages.length < 2) { toast('A design needs at least one page.'); return; }
   clearTimeout(saveTimer);
@@ -732,7 +754,7 @@ c.on('mouse:dblclick', e => { if (e.target?.type === 'image') editor.open(e.targ
 
 const actions: Record<string, () => void> = {
   undo, redo, del, dup, export: exportPNG, home: () => void showHome(), closeSheet,
-  style: () => { syncStyle(); openSheet('style'); }, pages: () => { openSheet('pages'); void renderPages(); }, addPage: () => addPage(false), dupPage: () => addPage(true), delPage: deletePage, exportAll: () => void exportAll(),
+  style: () => { syncStyle(); openSheet('style'); }, pages: () => { openSheet('pages'); void renderPages(); }, addPage: () => addPage(false), dupPage: () => addPage(true), delPage: deletePage, pageLeft: () => movePage(-1), pageRight: () => movePage(1), exportAll: () => void exportAll(),
   lock: toggleLock, group: groupSel, align: () => openSheet('align'),
   edit: () => { const [img] = images(); if (img) editor.open(img); },
   copyEdits: () => { const [img] = images(); if (img) editor.copyEdits(img); },
