@@ -2,9 +2,10 @@
 // plus built-in looks and your own saved presets (Lightroom-style, with an Amount slider).
 import { fabric } from 'fabric';
 import { scope } from './accounts';
+import { readSecure, writeSecure } from './secure';
 import { makeAdjustFilter } from './adjust';
 import { initCropper, renderCropped } from './crop';
-import { ADJ, AdjKey, BUILTIN, PhotoEdit, PhotoStats, Preset, autoAdjust, effective, isEdited, isNeutral } from './photoModel';
+import { ADJ, AdjKey, BUILTIN, KEYS, PhotoEdit, PhotoStats, Preset, autoAdjust, effective, isEdited, isNeutral } from './photoModel';
 
 // `orig` holds the untouched photo once a crop has been applied, so the crop can be re-edited or undone.
 export type PhotoImage = fabric.Image & { edit?: PhotoEdit; orig?: { src: string } };
@@ -16,9 +17,20 @@ const clone = <T,>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(
 
 // --- user presets ----------------------------------------------------------
 // shortcut: presets live in this browser's localStorage. Sync them to the account when accounts exist.
-const PKEY = scope('canva-lite:presets');
-let mine: Preset[] = (() => { try { return JSON.parse(localStorage.getItem(PKEY) ?? '[]'); } catch { return []; } })();
-const saveMine = () => { try { localStorage.setItem(PKEY, JSON.stringify(mine)); } catch { /* storage blocked */ } };
+const PKEY = () => scope('canva-lite:presets');
+let mine: Preset[] = [];
+const cleanPreset = (p: unknown): Preset | null => {
+  const q = p as Preset;
+  if (!q || typeof q.id !== 'string' || typeof q.name !== 'string' || !q.adj || typeof q.adj !== 'object') return null;
+  const adj: Preset['adj'] = {};
+  for (const k of KEYS) { const v = (q.adj as Record<string, unknown>)[k]; if (typeof v === 'number' && Number.isFinite(v)) adj[k] = Math.max(-100, Math.min(100, v)); }
+  return { id: q.id.slice(0, 40), name: q.name.slice(0, 60), adj };
+};
+// Call once the profile is unlocked.
+export const loadPresets = async () => { const v = await readSecure<unknown>(PKEY(), []); mine = Array.isArray(v) ? v.map(cleanPreset).filter((p): p is Preset => !!p) : []; };
+export const getPresets = () => mine;
+export const addPresets = (l: unknown[]) => { for (const p of l.map(cleanPreset)) if (p && !mine.some(x => x.id === p.id)) mine.push(p); saveMine(); };
+const saveMine = () => { void writeSecure(PKEY(), mine); };
 const allPresets = () => BUILTIN.concat(mine);
 
 export const applyEdit = (img: PhotoImage, e: PhotoEdit | undefined) => {

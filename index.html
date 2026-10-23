@@ -401,7 +401,7 @@
       <div class="row"><button id="acct-setpass" class="btn quiet">Set passcode</button><button id="acct-nopass" class="btn quiet">Remove passcode</button></div>
       <div class="row"><button id="acct-lock" class="btn quiet">Lock now</button><button id="acct-del" class="btn quiet">Delete profile</button></div>
       <h2>Backup</h2>
-      <p class="muted">A passcode only keeps casual snoopers out. It does not encrypt anything, and it does not move to another device. Use a backup file for that.</p>
+      <p class="muted">A passcode (8+ characters) encrypts this profile's designs, looks and brand colors on this device. If you forget it, nothing can recover them, so keep a backup file. It does not move to another device by itself.</p>
       <div class="row"><button id="acct-backup" class="btn quiet">Back up this profile</button><label class="btn quiet">Restore<input id="acct-restore" type="file" accept=".json,application/json" hidden></label></div>
       <a id="acct-dl" class="btn" download hidden>Download backup</a>
       <p id="acct-note" class="muted"></p>
@@ -413,7 +413,7 @@
     <div class="dialog" role="dialog" aria-labelledby="lock-h">
       <h1 id="lock-h">Welcome back, <span id="lock-name"></span></h1>
       <input id="lock-pass" type="password" placeholder="Passcode" autocomplete="current-password" aria-label="Passcode" style="min-height:48px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font-size:16px">
-      <p id="lock-err" hidden>That passcode does not match.</p>
+      <p id="lock-err" hidden>Wrong passcode.</p>
       <button id="lock-go" class="btn">Unlock</button>
       <div id="lock-others" class="list"></div>
     </div>

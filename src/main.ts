@@ -1,12 +1,14 @@
 import { fabric } from 'fabric';
-import { PhotoImage, initEditor } from './editor';
+import { PhotoImage, addPresets, getPresets, initEditor, loadPresets } from './editor';
 import { FONTS, loadFont } from './fonts';
 import { ICONS, svg } from './icons';
 import { Design, FabricJSON, Page, fabricToPage, newDesign, pageToFabric } from './model';
 import { SHAPES } from './shapes';
 import { SIZES } from './sizes';
-import { addProfile, canHash, current, deleteProfile, lockNow, needsUnlock, profiles, renameProfile, scope, setPasscode, switchTo, tryUnlock } from './accounts';
-import { addBrand, loadBrand, removeBrand } from './brand';
+import { MIN_PASS, addProfile, current, deleteProfile, lockNow, needsUnlock, noteFail, profiles, renameProfile, switchTo, tryUnlock, waitMs } from './accounts';
+import { changePasscode } from './protect';
+import { canCrypto } from './vault';
+import { addBrand, initBrand, loadBrand, removeBrand } from './brand';
 import { dataUrlBytes, makePdf } from './pdf';
 import { TEMPLATES, templatePage } from './templates';
 import { allDesigns, deleteDesign, getDesign, lastId, listMeta, migrateOld, putDesign, renameDesign, restoreDesigns, setLastId } from './store';
@@ -746,7 +748,15 @@ $('brand-add').onclick = () => { addBrand($<HTMLInputElement>('brand-color').val
 const me = current();
 const askPasscode = () => new Promise<void>(res => {
   $('lock-name').textContent = me.name; $('lock').hidden = false;
-  const go = async () => { if (await tryUnlock($<HTMLInputElement>('lock-pass').value)) { $('lock').hidden = true; res(); } else $('lock-err').hidden = false; };
+  let busy = false;
+  const go = async () => {
+    const w = waitMs();
+    if (busy || w > 0) { if (w > 0) { $('lock-err').textContent = `Too many tries. Wait ${Math.ceil(w / 1000)}s.`; $('lock-err').hidden = false; } return; }
+    busy = true;
+    const ok = await tryUnlock($<HTMLInputElement>('lock-pass').value);
+    noteFail(ok); busy = false;
+    if (ok) { $('lock').hidden = true; res(); } else { $('lock-err').textContent = 'Wrong passcode.'; $('lock-err').hidden = false; }
+  };
   $('lock-go').onclick = () => void go();
   $('lock-pass').onkeydown = e => { if (e.key === 'Enter') void go(); };
   $('lock-others').replaceChildren(...profiles().filter(p => p.id !== me.id).map(p => Object.assign(document.createElement('button'), { className: 'opt', textContent: `Use ${p.name} instead`, onclick: () => switchTo(p.id) })));
@@ -755,32 +765,33 @@ const renderAccounts = () => {
   $('acct-list').replaceChildren(...profiles().map(p => {
     const b = document.createElement('button');
     b.className = 'opt'; b.setAttribute('aria-pressed', String(p.id === me.id));
-    b.innerHTML = `<span><b></b><small>${p.id === me.id ? 'Open now' : 'Tap to switch'}${p.hash ? ' · has a passcode' : ''}</small></span>`;
+    b.innerHTML = `<span><b></b><small>${p.id === me.id ? 'Open now' : 'Tap to switch'}${p.salt ? ' · locked with a passcode' : ''}</small></span>`;
     b.querySelector('b')!.textContent = p.name;
     b.onclick = () => { if (p.id !== me.id) { if (live) void save(); switchTo(p.id); } };
     return b;
   }));
   $<HTMLInputElement>('acct-rename').value = me.name;
   $('acct-btn').textContent = me.name;
-  $('acct-nopass').hidden = !me.hash;
-  $('acct-lock').hidden = !me.hash;
+  $('acct-nopass').hidden = !me.salt;
+  $('acct-lock').hidden = !me.salt;
 };
-const needHash = () => { if (canHash()) return true; toast('Passcodes need a secure (https) page.'); return false; };
+const okPass = (v: string) => { if (!canCrypto()) { toast('Passcodes need a secure (https) page.'); return false; } if (v.length < MIN_PASS) { toast(`Use at least ${MIN_PASS} characters.`); return false; } return true; };
 $('acct-btn').onclick = () => { renderAccounts(); $('accounts').hidden = false; };
 $('acct-add').onclick = async () => {
   const name = $<HTMLInputElement>('acct-name').value, pass = $<HTMLInputElement>('acct-pass').value;
-  if (pass && !needHash()) return;
+  if (pass && !okPass(pass)) return;
   if (live) await save();
   switchTo(await addProfile(name, pass || undefined));
 };
-$('acct-rename').onchange = () => { renameProfile(me.id, $<HTMLInputElement>('acct-rename').value); location.reload(); };
+// No reloads here: a reload would drop the in-memory key and ask for the passcode again.
+$('acct-rename').onchange = () => { renameProfile(me.id, $<HTMLInputElement>('acct-rename').value); me.name = current().name; renderAccounts(); };
 $('acct-setpass').onclick = async () => {
   const v = $<HTMLInputElement>('acct-pass2').value;
-  if (!v) { toast('Type a passcode first.'); return; }
-  if (!needHash()) return;
-  await setPasscode(me.id, v); $<HTMLInputElement>('acct-pass2').value = ''; toast('Passcode set. It will be asked next time you open the editor.'); location.reload();
+  if (!okPass(v)) return;
+  if (live) { clearTimeout(saveTimer); await save(); }
+  live = false; await changePasscode(v); toast('Passcode set. Your designs are now encrypted.'); setTimeout(() => location.reload(), 600);
 };
-$('acct-nopass').onclick = async () => { await setPasscode(me.id, null); toast('Passcode removed'); location.reload(); };
+$('acct-nopass').onclick = async () => { if (live) { clearTimeout(saveTimer); await save(); } live = false; await changePasscode(null); toast('Passcode removed'); setTimeout(() => location.reload(), 600); };
 $('acct-lock').onclick = () => { if (live) void save().then(lockNow); else lockNow(); };
 $('acct-del').onclick = async () => {
   const b = $('acct-del');
@@ -792,7 +803,7 @@ $('acct-del').onclick = async () => {
 // Backup file: designs, looks and brand colors. Works on any device that runs the app.
 $('acct-backup').onclick = async () => {
   if (live) await save();
-  const presets = (() => { try { return JSON.parse(localStorage.getItem(scope('canva-lite:presets')) ?? '[]'); } catch { return []; } })();
+  const presets = getPresets();
   const data = { app: 'simplycanva', version: 1, profile: me.name, designs: await allDesigns(), presets, brand: loadBrand() };
   const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
   const a = $<HTMLAnchorElement>('acct-dl');
@@ -809,11 +820,9 @@ $<HTMLInputElement>('acct-restore').onchange = async e => {
     const data = JSON.parse(await f.text());
     if (data.app !== 'simplycanva' || !Array.isArray(data.designs)) throw new Error('not a backup');
     await restoreDesigns(data.designs);
-    const have = (() => { try { return JSON.parse(localStorage.getItem(scope('canva-lite:presets')) ?? '[]') as { id: string }[]; } catch { return []; } })();
-    const merged = [...have, ...(data.presets ?? []).filter((p: { id: string }) => !have.some(h => h.id === p.id))];
-    localStorage.setItem(scope('canva-lite:presets'), JSON.stringify(merged));
-    (data.brand ?? []).forEach((c: string) => addBrand(c));
-    toast(`Restored ${data.designs.length} design${data.designs.length === 1 ? '' : 's'}`); setTimeout(() => location.reload(), 600);
+    addPresets(Array.isArray(data.presets) ? data.presets : []);
+    (Array.isArray(data.brand) ? data.brand : []).forEach((c: unknown) => typeof c === 'string' && addBrand(c));
+    toast(`Restored ${data.designs.length} design${data.designs.length === 1 ? '' : 's'}`); renderBrand(); $('accounts').hidden = true; void showHome();
   } catch { toast('That file is not a SimplyCanva backup.'); }
 };
 
@@ -960,13 +969,24 @@ addEventListener('keydown', e => {
   else if (mod && k === 'd') { e.preventDefault(); dup(); }
 });
 
-renderBrand();
 ensureFonts([DEFAULT_FONT]);
 syncUI();
+// Protected profiles lock themselves after 5 minutes in a hidden tab.
+const watchIdle = () => {
+  if (!me.salt) return;
+  let t: number | undefined;
+  document.addEventListener('visibilitychange', () => {
+    clearTimeout(t);
+    if (document.hidden) t = window.setTimeout(() => { if (live) void save().then(lockNow); else lockNow(); }, 5 * 60_000);
+  });
+};
 // Open straight into the last design, or a blank square page. Home (and the size picker) is one tap away.
 void (async () => {
   if (needsUnlock()) await askPasscode();
   await migrateOld('');
+  await Promise.all([loadPresets(), initBrand()]);
+  renderBrand();
+  watchIdle();
   const id = lastId();
   let d = id ? await getDesign(id) : undefined;
   if (!d) { const m = (await listMeta())[0]; if (m) d = await getDesign(m.id); }

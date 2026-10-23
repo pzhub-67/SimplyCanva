@@ -2,6 +2,7 @@
 // shortcut: if IndexedDB is unavailable (private mode), designs live in memory for this visit only.
 import { dbName, current, scope } from './accounts';
 import type { Design } from './model';
+import { Enc, getKey, isSealed, open as openEnc, seal } from './vault';
 
 export interface Meta { id: string; title: string; updated: number; thumb: string; w: number; h: number }
 
@@ -20,23 +21,32 @@ const open = () => (dbp ??= new Promise<IDBDatabase | null>(res => {
 const done = (tx: IDBTransaction) => new Promise<void>((res, rej) => { tx.oncomplete = () => res(); tx.onerror = tx.onabort = () => rej(tx.error); });
 const req = <T,>(r: IDBRequest<T>) => new Promise<T>((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 
+// Records are plain for an unprotected profile and `{ id, enc }` once a passcode is set (see vault.ts).
+const wrap = async <T extends { id: string }>(v: T, k: CryptoKey | null = getKey()): Promise<T | { id: string; enc: Enc }> => (k ? { id: v.id, enc: await seal(v, k) } : v);
+const unwrap = async <T,>(r: unknown, k: CryptoKey | null = getKey()): Promise<T | undefined> => {
+  if (r === undefined) return undefined;
+  return isSealed(r) ? openEnc<T>(r.enc, k) : (r as T);
+};
+
 export const putDesign = async (design: Design, meta: Meta) => {
   const db = await open();
   if (!db) { mem.set(meta.id, { meta, design }); return; }
+  const [d, m] = await Promise.all([wrap(design), wrap(meta)]);
   const tx = db.transaction(['designs', 'meta'], 'readwrite');
-  tx.objectStore('designs').put(design); tx.objectStore('meta').put(meta);
+  tx.objectStore('designs').put(d); tx.objectStore('meta').put(m);
   await done(tx);
 };
 
 export const getDesign = async (id: string): Promise<Design | undefined> => {
   const db = await open();
   if (!db) return mem.get(id)?.design;
-  return req<Design | undefined>(db.transaction('designs').objectStore('designs').get(id));
+  return unwrap<Design>(await req<unknown>(db.transaction('designs').objectStore('designs').get(id)));
 };
 
 export const listMeta = async (): Promise<Meta[]> => {
   const db = await open();
-  const rows = db ? await req<Meta[]>(db.transaction('meta').objectStore('meta').getAll()) : [...mem.values()].map(v => v.meta);
+  const raw = db ? await req<unknown[]>(db.transaction('meta').objectStore('meta').getAll()) : [...mem.values()].map(v => v.meta);
+  const rows = (await Promise.all(raw.map(r => unwrap<Meta>(r).catch(() => undefined)))).filter((m): m is Meta => !!m);
   return rows.sort((a, b) => b.updated - a.updated);
 };
 
@@ -77,11 +87,26 @@ export const setLastId = (id: string) => { try { localStorage.setItem(LAST(), id
 export const allDesigns = async (): Promise<Design[]> => {
   const db = await open();
   if (!db) return [...mem.values()].map(v => v.design);
-  return req<Design[]>(db.transaction('designs').objectStore('designs').getAll());
+  const raw = await req<unknown[]>(db.transaction('designs').objectStore('designs').getAll());
+  return (await Promise.all(raw.map(r => unwrap<Design>(r)))).filter((d): d is Design => !!d);
 };
 export const restoreDesigns = async (designs: Design[]) => {
   for (const d of designs) {
     const p = d.pages[0];
     await putDesign(d, { id: d.id, title: d.title, updated: Date.now(), thumb: p.thumb ?? '', w: p.width, h: p.height });
   }
+};
+
+// Passcode added, changed or removed: read every record with the old key and write it back with the new one, in one transaction.
+export const reencryptAll = async (oldKey: CryptoKey | null, newKey: CryptoKey | null) => {
+  const db = await open();
+  if (!db) return;
+  const out: Record<'designs' | 'meta', unknown[]> = { designs: [], meta: [] };
+  for (const store of ['designs', 'meta'] as const) {
+    const raw = await req<{ id: string }[]>(db.transaction(store).objectStore(store).getAll());
+    for (const r of raw) { const v = await unwrap<{ id: string }>(r, oldKey); if (v) out[store].push(await wrap(v, newKey)); }
+  }
+  const tx = db.transaction(['designs', 'meta'], 'readwrite');
+  out.designs.forEach(r => tx.objectStore('designs').put(r)); out.meta.forEach(r => tx.objectStore('meta').put(r));
+  await done(tx);
 };

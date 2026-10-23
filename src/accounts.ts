@@ -1,11 +1,13 @@
 // Local accounts: separate profiles on this device, each with its own designs, presets and brand colors.
 // There is no server and no sign-in provider. A passcode only keeps casual snoopers out of the editor on a shared device:
-// the data itself is not encrypted, and it does not follow you to another device (use Back up instead).
-export interface Profile { id: string; name: string; salt?: string; hash?: string }
+// the data itself is encrypted with a key derived from the passcode (vault.ts). It does not follow you to another device (use Back up instead).
+export interface Profile { id: string; name: string; salt?: string; canary?: string }
+export const MIN_PASS = 8;
+const CANARY = 'simplycanva';
 
 const LIST = 'canva-lite:accounts';
 const CUR = 'canva-lite:account';
-const unlockKey = (id: string) => `canva-lite:unlocked:${id}`;
+import { deriveKey, hasKey, newSalt, openText, sealText, setKey } from './vault';
 
 const get = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const set = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage blocked */ } };
@@ -26,36 +28,36 @@ export const dbName = () => dbNameOf(current().id);
 
 export const switchTo = (id: string) => { set(CUR, id); location.reload(); };
 
-const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
-export const canHash = () => !!globalThis.crypto?.subtle;
-const hashOf = async (pass: string, salt: string) => {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveBits']);
-  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', iterations: 100_000, salt: new TextEncoder().encode(salt) }, key, 256));
-};
-
-export const needsUnlock = (p: Profile = current()) => {
-  try { return !!p.hash && sessionStorage.getItem(unlockKey(p.id)) !== '1'; } catch { return !!p.hash; }
-};
+export const needsUnlock = (p: Profile = current()) => !!p.salt && !hasKey();
+// Derives the key from the passcode and checks it against the stored canary. The key stays in memory only.
 export const tryUnlock = async (pass: string, p: Profile = current()) => {
-  if (!p.hash || !p.salt) return true;
-  if ((await hashOf(pass, p.salt)) !== p.hash) return false;
-  try { sessionStorage.setItem(unlockKey(p.id), '1'); } catch { /* unlocked for this page only */ }
-  return true;
+  if (!p.salt || !p.canary) return true;
+  try {
+    const k = await deriveKey(pass, p.salt);
+    if ((await openText<string>(p.canary, k)) !== CANARY) return false;
+    setKey(k);
+    return true;
+  } catch { return false; }
 };
-export const lockNow = () => { try { sessionStorage.removeItem(unlockKey(current().id)); } catch { /* ignore */ } location.reload(); };
+// Brute-force delay: each wrong guess doubles the wait (2s, 4s ... max 60s). Kept in localStorage so a reload does not reset it.
+const FAIL = 'canva-lite:fails';
+export const waitMs = () => { try { const [n, t] = JSON.parse(get(FAIL) ?? '[0,0]') as number[]; return n ? Math.max(0, t + Math.min(60, 2 ** n) * 1000 - Date.now()) : 0; } catch { return 0; } };
+export const noteFail = (ok: boolean) => { try { const [n] = JSON.parse(get(FAIL) ?? '[0,0]') as number[]; set(FAIL, JSON.stringify(ok ? [0, 0] : [n + 1, Date.now()])); } catch { /* ignore */ } };
+export const lockNow = () => { setKey(null); location.reload(); };
 
-export const setPasscode = async (id: string, pass: string | null) => {
+export const updateProfile = (id: string, patch: Partial<Profile>) => {
   const l = profiles(), p = l.find(x => x.id === id);
   if (!p) return;
-  if (!pass) { delete p.hash; delete p.salt; } else { p.salt = crypto.randomUUID(); p.hash = await hashOf(pass, p.salt); }
+  Object.assign(p, patch);
+  (Object.keys(patch) as (keyof Profile)[]).forEach(k => { if (patch[k] === undefined) delete p[k]; });
   saveProfiles(l);
-  try { sessionStorage.setItem(unlockKey(id), '1'); } catch { /* ignore */ }
 };
 
 export const addProfile = async (name: string, pass?: string) => {
   const id = Math.random().toString(36).slice(2, 10);
-  saveProfiles([...profiles(), { id, name: name.trim() || 'New profile' }]);
-  if (pass) await setPasscode(id, pass);
+  const prof: Profile = { id, name: name.trim() || 'New profile' };
+  if (pass) { prof.salt = newSalt(); prof.canary = await sealText(CANARY, await deriveKey(pass, prof.salt)); }
+  saveProfiles([...profiles(), prof]);
   return id;
 };
 export const renameProfile = (id: string, name: string) => { const l = profiles(); const p = l.find(x => x.id === id); if (p) { p.name = name.trim() || p.name; saveProfiles(l); } };
