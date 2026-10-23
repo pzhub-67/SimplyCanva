@@ -130,6 +130,9 @@
   .home-head h1 { margin: 0; font: 700 28px var(--font-brand); letter-spacing: -0.02em; }
   .home h2 { margin: 8px 0 0; font: 700 15px var(--font-ui); color: var(--muted); }
   .home #start-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  .tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .tpl { display: flex; flex-direction: column; gap: 6px; align-items: stretch; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); font: 600 13px var(--font-ui); cursor: pointer; text-align: left; }
+  .tpl img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border-radius: 8px; background: var(--stage); }
   .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
   .dcard { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
   .dcard .thumb { aspect-ratio: 1; display: grid; place-items: center; border: 0; border-radius: 8px; background: var(--stage); cursor: pointer; padding: 0; overflow: hidden; }
@@ -236,6 +239,7 @@
         <div class="slide"><span class="slide-name">Opacity</span><input id="st-op" type="range" min="0" max="100" value="100" aria-label="Opacity"><output id="st-op-v">100</output></div>
         <div class="slide" id="st-rad-row"><span class="slide-name">Corners</span><input id="st-rad" type="range" min="0" max="100" value="0" aria-label="Corner roundness"><output id="st-rad-v">0</output></div>
         <div class="slide" id="st-fill-row"><span class="slide-name">Fill</span><div id="st-fill" class="dial"></div></div>
+        <div class="slide" id="st-brand-row" hidden><span class="slide-name">Brand</span><div class="swatches" id="st-brand" style="margin:0"></div></div>
         <div class="slide"><span class="slide-name">Shadow</span><div id="st-shadow" class="dial"></div></div>
         <div class="grid3">
           <button class="opt" data-flip="x">Flip left-right</button>
@@ -262,6 +266,7 @@
       <section data-sheet="bg" data-title="Background" hidden>
         <label class="pick"><span class="swatch" id="bg-swatch"></span><span>Pick any color</span><input id="bg" type="color" value="#ffffff"></label>
         <div class="swatches" id="swatches"></div>
+        <div id="bg-brand-row" hidden><p class="muted">Brand colors</p><div class="swatches" id="bg-brand"></div></div>
       </section>
     </div>
   </main>
@@ -374,6 +379,13 @@
       </div>
       <h2>New design</h2>
       <div id="start-list" class="list"></div>
+      <h2>Start from a template</h2>
+      <div id="tpl-grid" class="tgrid"></div>
+      <h2>Brand colors</h2>
+      <p class="muted">Keep your colors here. They show up in the Background and Style menus. Tap a color to remove it.</p>
+      <div class="swatches" id="brand-manage"></div>
+      <p id="brand-empty" class="muted">No brand colors yet.</p>
+      <div class="row"><label class="pick"><span>Color</span><input id="brand-color" type="color" value="#0b7f78"></label><button id="brand-add" class="btn quiet">Add to brand</button></div>
       <h2>Your designs</h2>
       <div id="home-grid" class="dgrid"></div>
       <p id="home-empty" class="muted" hidden>Nothing saved yet. Designs you make appear here automatically.</p>

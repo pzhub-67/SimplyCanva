@@ -4,7 +4,9 @@ import { FONTS, loadFont } from './fonts';
 import { ICONS, svg } from './icons';
 import { Design, FabricJSON, Page, fabricToPage, newDesign, pageToFabric } from './model';
 import { SIZES } from './sizes';
+import { addBrand, loadBrand, removeBrand } from './brand';
 import { dataUrlBytes, makePdf } from './pdf';
+import { TEMPLATES, templatePage } from './templates';
 import { deleteDesign, getDesign, lastId, listMeta, migrateOld, putDesign, renameDesign, setLastId } from './store';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -696,7 +698,49 @@ const ago = (t: number) => {
   const m = Math.round((Date.now() - t) / 60000);
   return m < 1 ? 'Just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
 };
+const startFromTemplate = (spec: (typeof TEMPLATES)[number]) => {
+  clearTimeout(saveTimer);
+  const page = templatePage(spec);
+  design = { id: crypto.randomUUID(), title: spec.name, pages: [page] };
+  stored = false;
+  showPage(0, () => { $('home').hidden = true; autosave(); });
+};
+let tplThumbs: Record<string, string> | null = null;
+const renderTemplates = async () => {
+  const grid = $('tpl-grid');
+  const cards = TEMPLATES.map(spec => {
+    const b = document.createElement('button');
+    b.className = 'tpl'; b.setAttribute('aria-label', `Start from ${spec.name}`);
+    const im = document.createElement('img'); im.alt = ''; if (tplThumbs?.[spec.id]) im.src = tplThumbs[spec.id];
+    b.append(im, spec.name);
+    b.onclick = () => startFromTemplate(spec);
+    return { spec, im, b };
+  });
+  grid.replaceChildren(...cards.map(x => x.b));
+  if (tplThumbs) return;
+  const out: Record<string, string> = {};
+  for (const { spec, im } of cards) { out[spec.id] = await renderPage(templatePage(spec), 200, 'jpeg'); im.src = out[spec.id]; }
+  tplThumbs = out;
+};
+
+// Brand colors: managed on Home, applied from the Background and Style menus.
+const renderBrand = () => {
+  const colors = loadBrand();
+  const swatch = (hex: string, run: () => void, label: string) => {
+    const b = document.createElement('button');
+    b.style.background = hex; b.setAttribute('aria-label', label); b.onclick = run;
+    return b;
+  };
+  $('brand-manage').replaceChildren(...colors.map(h => swatch(h, () => { removeBrand(h); renderBrand(); }, `Remove brand color ${h}`)));
+  $('brand-empty').hidden = colors.length > 0;
+  $('bg-brand').replaceChildren(...colors.map(h => swatch(h, () => setBg(h, true), `Background ${h}`)));
+  $('st-brand').replaceChildren(...colors.map(h => swatch(h, () => { styled(o => { if (o.type !== 'image') o.set('fill', h); }, true); syncUI(); }, `Fill ${h}`)));
+  $('bg-brand-row').hidden = $('st-brand-row').hidden = colors.length === 0;
+};
+$('brand-add').onclick = () => { addBrand($<HTMLInputElement>('brand-color').value); renderBrand(); };
+
 const showHome = async () => {
+  void renderTemplates();
   $('home-back').hidden = !live;
   $('home').hidden = false;
   if (live) { clearTimeout(saveTimer); await save(); } // so the current design is listed with a fresh preview
@@ -836,6 +880,7 @@ addEventListener('keydown', e => {
   else if (mod && k === 'd') { e.preventDefault(); dup(); }
 });
 
+renderBrand();
 ensureFonts([DEFAULT_FONT]);
 syncUI();
 // Open straight into the last design, or a blank square page. Home (and the size picker) is one tap away.

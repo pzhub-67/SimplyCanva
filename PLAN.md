@@ -25,7 +25,7 @@ Process rule: any new focus the owner states in chat is added to this list in th
 **Commands**
 - `npm run dev` dev server, `npm test` unit tests (12), `npm run build` typecheck + bundle.
 - `npm run artifact` builds `dist/artifact.html`, a single self-contained page. Publish it with the Artifact tool using that same file path (keeps the same link). The owner opens that link on a phone.
-- Smoke tests: `python3 scripts/smoke/make_test_png.py` once, then `python3 scripts/smoke/smokeN.py` after `npm run artifact`. They drive headless Chromium at phone size (`--use-gl=swiftshader` so WebGL works): smoke4 crop flow, smoke5 home screen + zoom buttons, smoke6 pinch, smoke7 objects beyond page + export, smoke8 export while zoomed, smoke9 snapping, smoke10 align/lock/group, smoke11 filters + auto, smoke12 style, smoke13 multi-page + JPG + export all, smoke14 one-finger pan + page reorder. They read saved designs straight from IndexedDB.
+- Smoke tests: `python3 scripts/smoke/make_test_png.py` once, then `python3 scripts/smoke/smokeN.py` after `npm run artifact`. They drive headless Chromium at phone size (`--use-gl=swiftshader` so WebGL works): smoke4 crop flow, smoke5 home screen + zoom buttons, smoke6 pinch, smoke7 objects beyond page + export, smoke8 export while zoomed, smoke9 snapping, smoke10 align/lock/group, smoke11 filters + auto, smoke12 style, smoke13 multi-page + JPG + export all, smoke14 one-finger pan + page reorder, smoke15 gradients, smoke16 SVG + PDF export, smoke17 templates + brand colors. They read saved designs straight from IndexedDB.
 
 **How to work with the owner (Parker)**
 - On a phone only for now, so verify with headless screenshots and say plainly that it was not tried on a real phone.
@@ -56,6 +56,7 @@ Process rule: any new focus the owner states in chat is added to this list in th
 - Snapping works while moving only (not resizing or rotating). When zoomed out to fit, a one-finger drag on empty space draws a selection box (that is how you select several items).
 - Locked items can still be deleted. Text and photos inside a group cannot be edited until ungrouped. Corner radius is rectangles only.
 - Undo does not cross designs or pages.
+- Templates are built in code (`src/templates.ts`); there is no template search, categories or user-saved templates yet. Brand kit is colors only (no logos or brand fonts). No Magic Resize.
 - Never tried on a real phone; everything was checked in headless Chromium.
 
 ## Principles
@@ -114,6 +115,7 @@ BrandKit { id, logos[], colors[], fonts[] }
 - Done: one-finger pan on empty space when zoomed in (not zoomed: draws a selection box), page reorder (Move earlier / Move later)
 - Done: gradient fills (Sunset, Ocean, Mint, Night) in the Style menu; smoke15
 - Done: SVG export (with Copy code, since downloads are blocked in the viewer) and PDF export (all pages, one JPEG per page, tiny writer in `src/pdf.ts`, no library); smoke16
+- Done: Phase 3 starter (five built-in templates on Home: Quote, Sale, Story title, Title slide, Thumbnail; brand colors managed on Home and applied from Background/Style menus); smoke17
 - Next: snapping while resizing
 
 ## Phase 2: Photo editor and presets (M2)
