@@ -17,6 +17,8 @@ export const ICONS: Record<string, string> = {
   center: '<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>',
   right: '<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>',
   minus: '<path d="M5 12h14"/>',
+  sliders: '<path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  paste: '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9z"/>',
   rect: '<rect x="3" y="6" width="18" height="12" rx="1"/>',
   circle: '<circle cx="12" cy="12" r="9"/>',
   triangle: '<path d="M12 4 21 20H3z"/>',

@@ -58,6 +58,10 @@ BrandKit { id, logos[], colors[], fonts[] }
 ## Phase 2: Photo editor and presets (M2)
 Modeled on iPhone Photos for simplicity and Lightroom for presets.
 
+**Status**
+- Done: edit mode with all 15 sliders (one WebGL filter, params stored on the image), temporary preview with Done/Cancel, hold to compare, Revert, 10 built-in looks with Amount, saved presets (save, rename, delete, apply), copy/paste edits across selected photos, undo/redo and autosave of edits
+- Next: Crop tab (ratios, rotate, flip, straighten), filter thumbnails from the user's own photo, auto-enhance, before/after split, per-photo edit history list, preset import/export (copy/paste text, since downloads are blocked in the viewer), CPU fallback when WebGL is missing
+
 **Editing (iPhone-style)**
 - Double-click an image, or tap **Edit** in its toolbar, to enter edit mode. One panel, three tabs: **Adjust**, **Filters**, **Crop**.
 - **Adjust:** one slider at a time, selected from a horizontal dial of tools, same list as iPhone: Exposure, Brilliance, Highlights, Shadows, Contrast, Brightness, Black Point, Saturation, Vibrance, Warmth, Tint, Sharpness, Definition, Noise Reduction, Vignette. Every slider is -100 to +100, double-click resets it. A dot shows which tools are changed.

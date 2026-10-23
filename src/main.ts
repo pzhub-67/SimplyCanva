@@ -1,4 +1,5 @@
 import { fabric } from 'fabric';
+import { PhotoImage, initEditor } from './editor';
 import { FONTS, loadFont } from './fonts';
 import { ICONS, svg } from './icons';
 import { Design, FabricJSON, fabricToPage, newDesign, pageToFabric } from './model';
@@ -67,7 +68,7 @@ const toast = (msg: string, action?: { label: string; run: () => void }) => {
 // shortcut: one autosave slot in localStorage (~5MB). Photos are downscaled on import to keep it small; move to IndexedDB or a backend when it bites.
 const readSaved = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
 const save = () => {
-  design.pages[0] = fabricToPage(design.pages[0], c.toJSON() as unknown as FabricJSON, logical.w, logical.h);
+  design.pages[0] = fabricToPage(design.pages[0], c.toJSON(['edit']) as unknown as FabricJSON, logical.w, logical.h);
   try { localStorage.setItem(KEY, JSON.stringify(design)); } catch { toast('Could not save: browser storage is full or blocked.'); }
 };
 let saveTimer = 0;
@@ -84,7 +85,7 @@ const syncHistory = () => {
 const snap = () => {
   if (busy) return;
   hist = hist.slice(0, pos + 1);
-  hist.push(JSON.stringify(c.toJSON()));
+  hist.push(JSON.stringify(c.toJSON(['edit'])));
   pos = hist.length - 1;
   syncHistory(); autosave();
 };
@@ -121,7 +122,11 @@ const openSheet = (name: string) => {
 c.on('mouse:down', closeSheet);
 
 // --- adding things -------------------------------------------------------
-const place = (o: fabric.Object) => { c.add(o); c.viewportCenterObject(o); o.setCoords(); c.setActiveObject(o); c.requestRenderAll(); closeSheet(); };
+// Centered before the history snapshot, so undo/redo of an add keeps the position.
+const place = (o: fabric.Object) => {
+  batch(() => { c.add(o); c.viewportCenterObject(o); o.setCoords(); });
+  c.setActiveObject(o); c.requestRenderAll(); closeSheet();
+};
 
 const TEXT = {
   heading: { label: 'Add a heading', div: 9, family: 'Poppins', weight: 'bold' },
@@ -236,11 +241,13 @@ const hexOf = (fill: unknown) => (typeof fill === 'string' ? `#${new fabric.Colo
 function syncUI() {
   const o = c.getActiveObject() ?? undefined;
   const t = textObj();
-  const onlyImage = !!o && c.getActiveObjects().every(x => x.type === 'image');
+  const sel = c.getActiveObjects();
+  const onlyImage = !!o && sel.every(x => x.type === 'image');
   $('ctx-hint').hidden = !!o;
   all('[data-for]').forEach(el => {
     const f = el.dataset.for;
-    el.hidden = !o || (f === 'text' && !t) || (f === 'fill' && onlyImage);
+    el.hidden = !o || (f === 'text' && !t) || (f === 'fill' && onlyImage)
+      || (f === 'image1' && !(onlyImage && sel.length === 1)) || (f === 'imageN' && !onlyImage);
   });
   if (t) {
     fontSel.value = t.fontFamily ?? DEFAULT_FONT;
@@ -303,7 +310,7 @@ const continueSaved = () => {
       await ensureFonts(page.objects.map(o => o.fontFamily).filter((f): f is string => typeof f === 'string'));
       snap(); live = true; $('start').hidden = true; syncUI();
     });
-  } catch { toast('Your saved design could not be opened.'); }
+  } catch { toast('Your saved design could not be opened.'); startNew(1080, 1080); }
 };
 const showStart = () => {
   const canContinue = live || !!readSaved();
@@ -329,8 +336,15 @@ const exportPNG = () => {
 };
 
 // --- wiring ----------------------------------------------------------------
+const editor = initEditor({ c, commit: snap, toast });
+const images = () => c.getActiveObjects().filter((o): o is PhotoImage => o.type === 'image');
+c.on('mouse:dblclick', e => { if (e.target?.type === 'image') editor.open(e.target as PhotoImage); });
+
 const actions: Record<string, () => void> = {
   undo, redo, del, dup, export: exportPNG, new: showStart, closeSheet,
+  edit: () => { const [img] = images(); if (img) editor.open(img); },
+  copyEdits: () => { const [img] = images(); if (img) editor.copyEdits(img); },
+  pasteEdits: () => editor.pasteEdits(images()),
   continue: continueSaved,
   closeExport: () => { $('export').hidden = true; },
   forward: () => order(1), backward: () => order(-1),
@@ -352,7 +366,7 @@ all('[data-tab]').forEach(b => {
 addEventListener('keydown', e => {
   const t = e.target;
   if (t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement) return;
-  if (textObj()?.isEditing) return;
+  if (textObj()?.isEditing || editor.isOpen()) return;
   const mod = e.ctrlKey || e.metaKey;
   const k = e.key.toLowerCase();
   if (k === 'delete' || k === 'backspace') del();
@@ -363,4 +377,5 @@ addEventListener('keydown', e => {
 
 ensureFonts([DEFAULT_FONT]);
 syncUI();
-showStart();
+// Open straight into the last design, or a blank square page. The size picker is behind "New".
+if (readSaved()) continueSaved(); else startNew(1080, 1080);

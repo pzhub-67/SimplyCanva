@@ -129,6 +129,32 @@
   .row { display: flex; gap: 8px; flex-wrap: wrap; }
   .row > * { flex: 1; text-align: center; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 
+  /* photo editor replaces the top bar, toolbar and tabs while it is open */
+  body[data-editing] #top, body[data-editing] #ctx, body[data-editing] #tabs { display: none; }
+  #editor { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
+  .ed-head { display: flex; align-items: center; gap: 4px; }
+  .ed-head .tool { flex: 1; }
+  #ed-compare { background: var(--hover); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .ed-head .btn { flex: 1; }
+  .ed-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .ed-tabs .tool { min-height: 40px; font-size: 14px; }
+  .dial { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0; scrollbar-width: none; }
+  .chip {
+    position: relative; flex: none; min-height: 40px; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 500 14px var(--font-ui);
+  }
+  .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .chip.changed::after { content: ""; position: absolute; top: 5px; right: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .chip.changed[aria-pressed="true"]::after { background: var(--accent-ink); }
+  .slide { display: flex; align-items: center; gap: 10px; min-height: 48px; }
+  .slide-name { flex: none; min-width: 96px; font-weight: 600; }
+  .slide input[type=range] { flex: 1; min-width: 0; height: 36px; accent-color: var(--accent); }
+  .slide output { flex: none; min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+  .prows { display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow: auto; margin-bottom: 6px; }
+  .prow { display: flex; align-items: center; gap: 6px; }
+  .prow input { flex: 1; min-width: 0; min-height: 40px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font-size: 16px; }
+  .muted { color: var(--muted); margin: 4px 0 10px; }
+
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
 </style>
 </head>
@@ -189,6 +215,15 @@
       <button class="tool" id="b-right" data-act="right" aria-label="Align right"><span data-icon="right"></span></button>
     </div>
 
+    <div class="grp" data-for="image1" hidden>
+      <button class="tool" data-act="edit"><span data-icon="sliders"></span>Edit photo</button>
+      <button class="tool" data-act="copyEdits"><span data-icon="copy"></span>Copy edits</button>
+    </div>
+
+    <div class="grp" data-for="imageN" hidden>
+      <button class="tool" data-act="pasteEdits"><span data-icon="paste"></span>Paste edits</button>
+    </div>
+
     <div class="grp" data-for="fill" hidden>
       <div class="tool"><span class="swatch" id="swatch"></span>Color<input id="color" type="color" aria-label="Color"></div>
     </div>
@@ -208,6 +243,41 @@
     <button class="tool" data-tab="size"><span data-icon="size"></span>Size</button>
     <button class="tool" data-tab="bg"><span data-icon="bg"></span>Background</button>
   </nav>
+  <section id="editor" class="bar" aria-label="Photo editor" hidden>
+    <div class="ed-head">
+      <button class="tool" id="ed-cancel">Cancel</button>
+      <button class="tool" id="ed-compare" aria-label="Hold to compare with the original">Hold to compare</button>
+      <button class="tool" id="ed-revert">Revert</button>
+      <button class="btn" id="ed-done">Done</button>
+    </div>
+    <div class="ed-tabs">
+      <button class="tool" data-ed-tab="adjust" aria-pressed="true">Adjust</button>
+      <button class="tool" data-ed-tab="filters" aria-pressed="false">Filters</button>
+      <button class="tool" data-ed-tab="mine" aria-pressed="false">Mine</button>
+    </div>
+    <div data-ed-panel="adjust">
+      <div id="dial" class="dial"></div>
+      <div class="slide">
+        <span id="adj-name" class="slide-name"></span>
+        <input id="adj-range" type="range" min="-100" max="100" step="1" value="0" aria-label="Amount">
+        <output id="adj-val"></output>
+        <button class="tool" id="adj-reset">Reset</button>
+      </div>
+    </div>
+    <div data-ed-panel="filters" hidden><div id="filters" class="dial"></div></div>
+    <div data-ed-panel="mine" hidden>
+      <div id="mine" class="prows"></div>
+      <div class="prow">
+        <input id="preset-name" type="text" placeholder="Name this look" aria-label="Preset name" maxlength="40">
+        <button class="btn" id="save-preset">Save current look</button>
+      </div>
+    </div>
+    <div id="amount" class="slide" hidden>
+      <span class="slide-name">Amount</span>
+      <input id="amt-range" type="range" min="0" max="100" step="1" value="100" aria-label="Preset amount">
+      <output id="amt-val"></output>
+    </div>
+  </section>
   <input id="img" type="file" accept="image/*" multiple hidden>
 
   <div id="start" class="overlay" hidden>
