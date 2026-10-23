@@ -12,6 +12,7 @@ const all = <T extends HTMLElement = HTMLElement>(sel: string) => [...document.q
 const ACCENT = '#0e9488';
 const INK = '#16211f';
 const DEFAULT_FONT = FONTS[0];
+const PROPS = ['edit', 'orig', 'locked']; // custom per-object data kept in saves and undo
 
 // Bigger, rounder handles so objects are easy to grab with a finger.
 fabric.Object.prototype.set({
@@ -240,7 +241,7 @@ const toast = (msg: string, action?: { label: string; run: () => void }) => {
 let stored = false; // true once this design exists in the store
 const thumbOf = () => pageImage('jpeg', Math.round((logical.w * 240) / Math.max(logical.w, logical.h)), 0.7);
 const save = async () => {
-  design.pages[0] = fabricToPage(design.pages[0], c.toJSON(['edit', 'orig']) as unknown as FabricJSON, logical.w, logical.h);
+  design.pages[0] = fabricToPage(design.pages[0], c.toJSON(PROPS) as unknown as FabricJSON, logical.w, logical.h);
   if (!stored && !c.getObjects().length) return;
   try {
     await putDesign(design, { id: design.id, title: design.title, updated: Date.now(), thumb: thumbOf(), w: logical.w, h: logical.h });
@@ -261,7 +262,7 @@ const syncHistory = () => {
 const snap = () => {
   if (busy) return;
   hist = hist.slice(0, pos + 1);
-  hist.push(JSON.stringify(c.toJSON(['edit', 'orig'])));
+  hist.push(JSON.stringify(c.toJSON(PROPS)));
   pos = hist.length - 1;
   syncHistory(); autosave();
 };
@@ -270,7 +271,7 @@ const batch = (fn: () => void) => { busy = true; try { fn(); } finally { busy = 
 const restore = (i: number) => {
   if (i < 0 || i >= hist.length) return;
   busy = true; pos = i;
-  c.loadFromJSON(hist[i], () => { busy = false; refit(); syncUI(); syncHistory(); autosave(); });
+  c.loadFromJSON(hist[i], () => { busy = false; relock(); refit(); syncUI(); syncHistory(); autosave(); });
 };
 const undo = () => restore(pos - 1);
 const redo = () => restore(pos + 1);
@@ -376,6 +377,7 @@ const dup = () => {
       c.discardActiveObject();
       cl.set({ left: (o.left ?? 0) + 24, top: (o.top ?? 0) + 24, evented: true });
       if (cl instanceof fabric.ActiveSelection) { cl.canvas = c; cl.forEachObject(x => { c.add(x); }); cl.setCoords(); } else c.add(cl);
+      relock();
     });
     c.setActiveObject(cl);
     c.requestRenderAll();
@@ -383,6 +385,52 @@ const dup = () => {
 };
 const order = (dir: 1 | -1) => {
   batch(() => c.getActiveObjects().forEach(o => { if (dir > 0) c.bringForward(o); else c.sendBackwards(o); }));
+  c.requestRenderAll();
+};
+
+// --- lock, group, align ---------------------------------------------------------
+type Lockable = fabric.Object & { locked?: boolean };
+const applyLock = (o: Lockable) => {
+  const on = !!o.locked;
+  o.set({ lockMovementX: on, lockMovementY: on, lockRotation: on, lockScalingX: on, lockScalingY: on, hasControls: !on });
+};
+const relock = () => c.getObjects().forEach(o => applyLock(o as Lockable));
+const toggleLock = () => {
+  const objs = c.getActiveObjects() as Lockable[];
+  if (!objs.length) return;
+  const on = !objs.every(o => o.locked);
+  batch(() => objs.forEach(o => { o.locked = on || undefined; applyLock(o); }));
+  c.requestRenderAll(); syncUI();
+  toast(on ? 'Locked. Tap Unlock to move it again.' : 'Unlocked');
+};
+const groupSel = () => {
+  const a = c.getActiveObject();
+  if (!a) return;
+  batch(() => {
+    if (a.type === 'activeSelection') (a as fabric.ActiveSelection).toGroup();
+    else if (a.type === 'group') (a as fabric.Group).toActiveSelection();
+  });
+  c.requestRenderAll(); syncUI();
+};
+type Edge = 'l' | 'c' | 'r' | 't' | 'm' | 'b';
+// One object aligns to the page; several align to each other.
+const align = (edge: Edge) => {
+  const objs = c.getActiveObjects();
+  if (!objs.length) return;
+  batch(() => {
+    c.discardActiveObject();
+    const rs = objs.map(o => o.getBoundingRect(true, true));
+    const box = objs.length === 1
+      ? { l: 0, t: 0, r: logical.w, b: logical.h }
+      : { l: Math.min(...rs.map(r => r.left)), t: Math.min(...rs.map(r => r.top)), r: Math.max(...rs.map(r => r.left + r.width)), b: Math.max(...rs.map(r => r.top + r.height)) };
+    objs.forEach((o, i) => {
+      const r = rs[i];
+      const dx = edge === 'l' ? box.l - r.left : edge === 'c' ? (box.l + box.r) / 2 - (r.left + r.width / 2) : edge === 'r' ? box.r - (r.left + r.width) : 0;
+      const dy = edge === 't' ? box.t - r.top : edge === 'm' ? (box.t + box.b) / 2 - (r.top + r.height / 2) : edge === 'b' ? box.b - (r.top + r.height) : 0;
+      o.set({ left: (o.left ?? 0) + dx, top: (o.top ?? 0) + dy }); o.setCoords();
+    });
+    c.setActiveObject(objs.length > 1 ? new fabric.ActiveSelection(objs, { canvas: c }) : objs[0]);
+  });
   c.requestRenderAll();
 };
 
@@ -420,9 +468,15 @@ function syncUI() {
   const sel = c.getActiveObjects();
   const onlyImage = !!o && sel.every(x => x.type === 'image');
   $('ctx-hint').hidden = !!o;
+  const isGroup = o?.type === 'group', canGroup = o?.type === 'activeSelection';
+  $('b-group').hidden = !isGroup && !canGroup;
+  $('b-group').lastChild!.textContent = isGroup ? 'Ungroup' : 'Group';
+  const allLocked = sel.length > 0 && sel.every(x => (x as Lockable).locked);
+  $('b-lock').lastChild!.textContent = allLocked ? 'Unlock' : 'Lock';
+  $('b-lock').setAttribute('aria-pressed', String(allLocked));
   all('[data-for]').forEach(el => {
     const f = el.dataset.for;
-    el.hidden = !o || (f === 'text' && !t) || (f === 'fill' && onlyImage)
+    el.hidden = !o || (f === 'text' && !t) || (f === 'fill' && (onlyImage || isGroup))
       || (f === 'image1' && !(onlyImage && sel.length === 1)) || (f === 'imageN' && !onlyImage);
   });
   if (t) {
@@ -481,7 +535,7 @@ const loadDesign = (d: Design) => {
     vz = 1; vx = 0; vy = 0;
     busy = true;
     c.loadFromJSON(pageToFabric(page), async () => {
-      busy = false; hist = []; pos = -1; stored = true;
+      busy = false; relock(); hist = []; pos = -1; stored = true;
       fit(); setBg(page.background, false);
       await ensureFonts(page.objects.map(o => o.fontFamily).filter((f): f is string => typeof f === 'string'));
       snap(); live = true; setLastId(d.id); $('home').hidden = true; syncUI();
@@ -552,6 +606,7 @@ c.on('mouse:dblclick', e => { if (e.target?.type === 'image') editor.open(e.targ
 
 const actions: Record<string, () => void> = {
   undo, redo, del, dup, export: exportPNG, home: () => void showHome(), closeSheet,
+  lock: toggleLock, group: groupSel, align: () => openSheet('align'),
   edit: () => { const [img] = images(); if (img) editor.open(img); },
   copyEdits: () => { const [img] = images(); if (img) editor.copyEdits(img); },
   pasteEdits: () => editor.pasteEdits(images()),
@@ -568,6 +623,7 @@ const actions: Record<string, () => void> = {
 };
 all('[data-act]').forEach(b => { b.onclick = actions[b.dataset.act!]; });
 all('[data-text]').forEach(b => { b.onclick = () => addText(b.dataset.text as keyof typeof TEXT); });
+all('[data-align]').forEach(b => { b.onclick = () => align(b.dataset.align as Edge); });
 all('[data-add]').forEach(b => { b.onclick = () => addShape(b.dataset.add!); });
 all('[data-tab]').forEach(b => {
   b.onclick = () => { if (b.dataset.tab === 'photo') { closeSheet(); $('img').click(); } else openSheet(b.dataset.tab!); };

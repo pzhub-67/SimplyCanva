@@ -65,7 +65,8 @@ BrandKit { id, logos[], colors[], fonts[] }
 - Done: add text/shapes/images, layer order, undo/redo, size presets, PNG export, local save
 - Done: Vite + TypeScript, `Design`/`Page` model (`src/model.ts`), font picker, size, bold/italic/underline, alignment
 - Done: mobile-first shell (top bar, bottom tabs and sheets, contextual toolbar, start screen), autosave, zoom to fit, drag-drop and paste images, photo downscale on import, duplicate, keyboard shortcuts, light/dark theme
-- Next: group/ungroup, lock, alignment buttons
+- Done (Phase 1 additions): group/ungroup, lock/unlock, Align menu (page for one item, each other for several)
+- Next: filter thumbnails
 - Next: multi-page (page strip), opacity, flip, corner radius, shadows, gradients
 - Next: export JPG, SVG, PDF
 
@@ -143,4 +144,4 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 5. **AI:** optional and off by default, so the core stays free of API costs.
 
 ## Next step
-Phase 1 and most of Phase 2 are built. Next: group/ungroup and lock, then filter thumbnails and auto-enhance.
+Phase 1 and most of Phase 2 are built. Next: filter thumbnails and auto-enhance, then templates.

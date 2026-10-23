@@ -213,6 +213,18 @@
         </div>
       </section>
 
+      <section data-sheet="align" data-title="Align" hidden>
+        <p class="muted">One item lines up with the page. Several items line up with each other.</p>
+        <div class="grid3">
+          <button class="opt" data-align="l"><span data-icon="alignL"></span>Left</button>
+          <button class="opt" data-align="c"><span data-icon="alignC"></span>Center</button>
+          <button class="opt" data-align="r"><span data-icon="alignR"></span>Right</button>
+          <button class="opt" data-align="t"><span data-icon="alignT"></span>Top</button>
+          <button class="opt" data-align="m"><span data-icon="alignM"></span>Middle</button>
+          <button class="opt" data-align="b"><span data-icon="alignB"></span>Bottom</button>
+        </div>
+      </section>
+
       <section data-sheet="size" data-title="Page size" hidden>
         <div id="size-list" class="list"></div>
       </section>
@@ -254,6 +266,9 @@
     </div>
 
     <div class="grp" data-for="any" hidden>
+      <button class="tool" id="b-group" data-act="group" hidden><span data-icon="group"></span>Group</button>
+      <button class="tool" data-act="align"><span data-icon="alignC"></span>Align</button>
+      <button class="tool" id="b-lock" data-act="lock"><span data-icon="lock"></span>Lock</button>
       <button class="tool" data-act="dup"><span data-icon="copy"></span>Duplicate</button>
       <button class="tool" data-act="forward"><span data-icon="forward"></span>Forward</button>
       <button class="tool" data-act="backward"><span data-icon="back"></span>Back</button>
