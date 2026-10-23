@@ -111,7 +111,8 @@ BrandKit { id, logos[], colors[], fonts[] }
 - Done: group/ungroup, lock/unlock, Align menu (page for one item, each other for several); Style menu with opacity, corner radius (rectangles), shadow (None/Soft/Hard) and flip
 - Done: multi-page (Page N of M chip opens a strip: switch, add, duplicate, delete; all pages share one size), JPG export, Export all pages, Style/Align sheets slide the page up so the selected item stays visible
 - Done: one-finger pan on empty space when zoomed in (not zoomed: draws a selection box), page reorder (Move earlier / Move later)
-- Next: gradients, snapping while resizing, SVG and PDF export
+- Done: gradient fills (Sunset, Ocean, Mint, Night) in the Style menu; smoke15
+- Next: snapping while resizing, SVG and PDF export
 
 ## Phase 2: Photo editor and presets (M2)
 Modeled on iPhone Photos for simplicity and Lightroom for presets.

@@ -467,6 +467,23 @@ $('st-shadow').replaceChildren(...Object.keys(SHADOWS).map(name => {
   return b;
 }));
 all('[data-flip]').forEach(b => { b.onclick = () => styled(o => { if (b.dataset.flip === 'x') o.set('flipX', !o.flipX); else o.set('flipY', !o.flipY); }, true); });
+const GRADS: Record<string, [string, string]> = { Sunset: ['#ff7a18', '#af002d'], Ocean: ['#2193b0', '#6dd5ed'], Mint: ['#11998e', '#38ef7d'], Night: ['#232526', '#5c5c8a'] };
+const gradOf = (o: fabric.Object, [a, b]: [string, string]) =>
+  new fabric.Gradient({ type: 'linear', gradientUnits: 'pixels', coords: { x1: 0, y1: 0, x2: o.width ?? 100, y2: o.height ?? 100 }, colorStops: [{ offset: 0, color: a }, { offset: 1, color: b }] });
+$('st-fill').replaceChildren(...['Solid', ...Object.keys(GRADS)].map(name => {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = name; b.dataset.fill = name;
+  const g = GRADS[name];
+  if (g) { b.style.background = `linear-gradient(135deg, ${g[0]}, ${g[1]})`; b.style.color = '#fff'; b.style.textShadow = '0 1px 2px rgb(0 0 0 / .5)'; }
+  b.onclick = () => { styled(o => { if (o.type !== 'image') o.set('fill', g ? gradOf(o, g) : colorEl.value); }, true); syncStyle(); syncUI(); };
+  return b;
+}));
+const fillName = (o: fabric.Object) => {
+  const f = o.fill as { colorStops?: { color: string }[] } | string | null | undefined;
+  if (!f || typeof f === 'string') return 'Solid';
+  const first = f.colorStops?.[0]?.color.toLowerCase();
+  return Object.entries(GRADS).find(([, g]) => g[0] === first)?.[0] ?? 'Solid';
+};
 const syncStyle = () => {
   const objs = c.getActiveObjects(), o = objs[0];
   if (!o) return;
@@ -475,6 +492,10 @@ const syncStyle = () => {
   $('st-rad-row').hidden = !rects;
   if (rects) { radEl.value = String(Math.round(((o as fabric.Rect).rx ?? 0) / radOf(o) * 100)); $('st-rad-v').textContent = radEl.value; }
   all('[data-shadow]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.shadow === shadowName(o))));
+  const fillable = objs.some(x => x.type !== 'image');
+  $('st-fill-row').hidden = !fillable;
+  const fo = objs.find(x => x.type !== 'image');
+  if (fo) all('[data-fill]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fill === fillName(fo))));
 };
 
 type Edge = 'l' | 'c' | 'r' | 't' | 'm' | 'b';
