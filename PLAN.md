@@ -65,10 +65,10 @@ BrandKit { id, logos[], colors[], fonts[] }
 - Done: add text/shapes/images, layer order, undo/redo, size presets, PNG export, local save
 - Done: Vite + TypeScript, `Design`/`Page` model (`src/model.ts`), font picker, size, bold/italic/underline, alignment
 - Done: mobile-first shell (top bar, bottom tabs and sheets, contextual toolbar, start screen), autosave, zoom to fit, drag-drop and paste images, photo downscale on import, duplicate, keyboard shortcuts, light/dark theme
-- Done (Phase 1 additions): group/ungroup, lock/unlock, Align menu (page for one item, each other for several)
-- Next: filter thumbnails
-- Done: Style menu with opacity, corner radius (rectangles), shadow (None/Soft/Hard) and flip
-- Next: multi-page (page strip), gradients, style sheet that doesn't cover the selected item
+- Done: Home screen with saved designs (thumbnails, rename, delete) on IndexedDB; two-finger pinch/pan, zoom buttons, Fit; corner-only handles that scale with the object
+- Done: objects can sit outside the page (faded, full when selected, cropped from export); snapping guides to the page and other objects
+- Done: group/ungroup, lock/unlock, Align menu (page for one item, each other for several); Style menu with opacity, corner radius (rectangles), shadow (None/Soft/Hard) and flip
+- Next: multi-page (page strip), gradients, a style sheet that doesn't cover the selected item, snapping while resizing, one-finger pan
 - Next: export JPG, SVG, PDF
 
 ## Phase 2: Photo editor and presets (M2)
@@ -77,7 +77,8 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 **Status**
 - Done: edit mode with all 15 sliders (one WebGL filter, params stored on the image), temporary preview with Done/Cancel, hold to compare, Revert, 10 built-in looks with Amount, saved presets (save, rename, delete, apply), copy/paste edits across selected photos, undo/redo and autosave of edits
 - Done: Crop tab with ratio chips (Free, Original, Page, 1:1, 4:5, 3:4, 16:9, 9:16), draggable frame with corner resize, rotate 90, flip H/V, straighten -45 to +45 (frame stays inside the photo), Reset; crop is re-editable because the original is kept, and it works with Cancel, Revert and undo/redo
-- Done (Phase 1 additions): Home screen with saved designs (thumbnails, rename, delete) on IndexedDB; two-finger pinch/pan, zoom buttons, Fit; corner-only handles that scale with the object from the user's own photo, auto-enhance, before/after split, per-photo edit history list, preset import/export (copy/paste text, since downloads are blocked in the viewer), CPU fallback when WebGL is missing
+- Done: Filters tab shows thumbnails rendered from the user's own photo; one-tap Auto enhance (reads brightness and colour, sets sliders you can still tweak)
+- Next: before/after split, per-photo edit history list, preset import/export (copy/paste text, since downloads are blocked in the viewer), CPU fallback when WebGL is missing
 
 **Editing (iPhone-style)**
 - Double-click an image, or tap **Edit** in its toolbar, to enter edit mode. One panel, three tabs: **Adjust**, **Filters**, **Crop**.
