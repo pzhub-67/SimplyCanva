@@ -3,7 +3,7 @@ from playwright.sync_api import sync_playwright
 errs = []
 def img(pg):
     pg.wait_for_timeout(900)
-    d = json.loads(pg.evaluate("localStorage.getItem('canva-lite:design')"))
+    d = json.loads(pg.evaluate("""() => new Promise(r => { const q = indexedDB.open('canva-lite'); q.onsuccess = () => { const g = q.result.transaction('designs').objectStore('designs').getAll(); g.onsuccess = () => r(JSON.stringify(g.result[0])); }; })"""))
     o = [o for o in d['pages'][0]['objects'] if o['type'] == 'image'][0]
     return dict(w=o['width'], h=o['height'], orig=bool(o.get('orig')), crop=(o.get('edit') or {}).get('crop'), left=round(o['left']), top=round(o['top']), sx=round(o['scaleX'], 3))
 def edit(pg):

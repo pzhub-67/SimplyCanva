@@ -193,4 +193,4 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 5. **AI:** optional and off by default, so the core stays free of API costs.
 
 ## Next step
-Phase 1 and most of Phase 2 are built. Next: templates and brand kit (Phase 3), then asset library. Smaller leftovers are listed under Phase 1 "Next".
+Phases 1 and 2 and a starter of Phase 3 are built and live; everything runs in the browser with no backend. Not started because they need outside services or content: Phase 4 asset library (stock photos, icons, licensing), Phase 5 accounts, cloud sync and sharing (needs a backend), Phase 6 AI, presentations mode and video. Good next code-only steps: snapping while resizing, user-saved templates, brand fonts and logos, template categories and search, Magic Resize, preset import/export as text, before/after split, CPU fallback for photo edits, and a real-phone pass over touch behavior.
