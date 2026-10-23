@@ -1,92 +1,128 @@
-# Plan v2: Open-Source Canva Clone
+# Plan v3: Open-Source Canva Clone
 
-Reworked against `canva-feature-reference.md`. Phases follow the reference's build priorities; modules (M1–M7) map to its sections.
+Built against `canva-feature-reference.md`. Priorities set by the owner: **ease of use first**, **iPhone-style photo editing with Lightroom-style presets**, collaboration deprioritized.
 
 ## Principles
-- **Open source means no plan gating.** Everything Canva paywalls (SVG export, background remover, brand kit, resize) is just a feature here.
-- **One document format.** Every feature reads and writes the same design JSON. Get this right first.
-- **Offline-first, then server.** The editor works with no backend; accounts, sync and sharing layer on top.
+- **Ease of use beats feature count.** If a feature needs explaining, simplify it before shipping it.
+- **Open source means no plan gating.** SVG export, background remover, brand kit and resize are plain features.
+- **One document format.** Every feature reads and writes the same design JSON.
+- **Offline-first.** The editor works with no backend; accounts and sharing layer on top.
+- **Non-destructive.** Originals are never altered; every edit can be reverted.
 - **Self-hostable.** One Docker image plus Postgres and S3-compatible storage.
+
+## Ease-of-use requirements (apply to every phase)
+- **Start screen, not a blank canvas:** pick a size or template, recent designs, drag a photo in to start.
+- **Contextual toolbar:** controls for the selected object appear next to it (text, image, shape), nothing else.
+- **Left sidebar tabs:** Templates, Elements, Text, Uploads, Photos. One click each, search at the top.
+- **Direct manipulation:** drag-drop files, paste images, double-click to edit, snap and guides on by default.
+- **Never lose work:** autosave, unlimited undo/redo, "revert" on photo edits.
+- **Keyboard and command palette:** shortcuts for everything common, Ctrl/Cmd+K to search any action.
+- **Zoom to fit, pinch/trackpad zoom, touch support** so it is usable on a tablet.
+- **Sensible defaults and plain words:** no jargon in labels, tooltips on every icon, undo toast after destructive actions.
+- **Accessible:** keyboard navigable, contrast checked, alt text field on images.
 
 ## Core data model (decide in Phase 1)
 ```
 Design   { id, title, brandKitId?, pages: Page[] }
 Page     { id, width, height, background, objects: Object[], durationMs? }
 Object   { id, type, x, y, w, h, rotation, locked, opacity, ...typeProps }
+ImageObj extends Object { src, crop, edit: PhotoEdit }      // src is never modified
+PhotoEdit { adjustments: {exposure, brilliance, highlights, shadows, contrast, brightness,
+            blackPoint, saturation, vibrance, warmth, tint, sharpness, definition,
+            noiseReduction, vignette}, filter?: {presetId, amount}, crop, rotation, straighten }
+Preset   { id, name, group, adjustments: Partial<adjustments>, builtIn }
 Template { id, name, category, tags[], thumbnail, design: Design }
 Asset    { id, kind, url, license, tags[] }
 BrandKit { id, logos[], colors[], fonts[] }
 ```
-Fabric `toJSON` maps onto `Object`. Multi-page, templates, resize and collaboration all fall out of this shape.
 
 ## Module map
 | Module | Reference section | Phase |
 |---|---|---|
-| M1 Editor core | 1 Design Creation | 1 |
-| M2 Templates, resize, brand kit | 1 Design Creation | 2 |
-| M3 Asset library | 2 Content Library | 3 |
-| M4 Export and publishing | 6 Output | 1 (basic), 4 (more) |
-| M5 Accounts, sharing | 5 Collaboration | 4 |
-| M6 Realtime collaboration | 5 Collaboration | 5 |
-| M7 AI, presentations, video | 3, 4 | 6 |
+| M1 Editor core and usability | 1 Design Creation | 1 |
+| M2 Photo editor and presets | 7 Photo editing | 2 |
+| M3 Templates, resize, brand kit | 1 Design Creation | 3 |
+| M4 Asset library | 2 Content Library | 4 |
+| M5 Export, accounts, sharing | 5, 6 | 5 |
+| M6 AI, presentations, video | 3, 4 | 6 |
+| M7 Collaboration (optional) | 5 | later |
 
-## Phase 1: Editor core (M1, M4 basics) — ship a usable editor
-- Done: add text/shapes/images, layers order, undo/redo, size presets, PNG export, local save
-- Done: Vite + TypeScript, `Design`/`Page` data model (`src/model.ts`), font picker (Google Fonts), size, bold/italic/underline, alignment
-- Next: group/ungroup, lock, duplicate
-- Next: snapping and alignment guides, rulers, zoom/pan
-- Next: multi-page (page strip), per-object opacity, flip, corner radius, shadows, gradients
+## Phase 1: Editor core and usability (M1)
+- Done: add text/shapes/images, layer order, undo/redo, size presets, PNG export, local save
+- Done: Vite + TypeScript, `Design`/`Page` model (`src/model.ts`), font picker, size, bold/italic/underline, alignment
+- Next: layout shell: top bar, left sidebar tabs, contextual toolbar, start screen
+- Next: autosave, drag-drop and paste images, zoom to fit and pinch/scroll zoom
+- Next: snapping and alignment guides, group/ungroup, lock, duplicate, keyboard shortcuts
+- Next: multi-page (page strip), opacity, flip, corner radius, shadows, gradients
 - Next: export JPG, SVG, PDF
 
-## Phase 2: Templates and brand (M2)
-- Template gallery: search, categories, tags, thumbnails (saved design JSON)
+## Phase 2: Photo editor and presets (M2)
+Modeled on iPhone Photos for simplicity and Lightroom for presets.
+
+**Editing (iPhone-style)**
+- Double-click an image, or tap **Edit** in its toolbar, to enter edit mode. One panel, three tabs: **Adjust**, **Filters**, **Crop**.
+- **Adjust:** one slider at a time, selected from a horizontal dial of tools, same list as iPhone: Exposure, Brilliance, Highlights, Shadows, Contrast, Brightness, Black Point, Saturation, Vibrance, Warmth, Tint, Sharpness, Definition, Noise Reduction, Vignette. Every slider is -100 to +100, double-click resets it. A dot shows which tools are changed.
+- **Temporary settings:** edits are a live preview until you press **Done**. **Cancel** discards, **hold to compare** shows the original, and **Revert to original** is always available after Done. Nothing touches the source image.
+- **Filters:** a row of preset thumbnails rendered from the user's own photo, with an **intensity slider** (0-100). Filter and manual adjustments stack.
+- **Crop and straighten:** aspect ratio chips (free, 1:1, 4:5, 16:9, match page), rotate 90, flip, straighten dial, auto-straighten later.
+- **Auto:** one-tap auto-enhance that sets the sliders so users can tweak them.
+
+**Presets (Lightroom-style)**
+- **Save as preset:** captures the current sliders, with name and group (e.g. Portrait, Moody, Film).
+- Presets are fully customizable: rename, edit, reorder, duplicate, delete, favorite. Built-ins are locked but can be duplicated.
+- **Apply with Amount:** presets scale by an intensity slider and combine with manual changes.
+- **Copy/paste settings** between images, and **apply to all selected images** in one go.
+- **Import/export** presets as a small JSON file, so they can be shared. Stored locally first, synced to the account later.
+- **Before/after** split view, and **edit history** list for the current photo (click to step back).
+
+**Rendering**
+- One WebGL shader pipeline takes the `PhotoEdit` params and renders a downscaled live preview; export renders full resolution. Canvas 2D fallback if WebGL is missing.
+- Fabric's built-in filters lack Exposure, Highlights, Shadows, Warmth and Tint, so use a custom pipeline, not Fabric filters.
+- Edits are stored as params on the object, so they are tiny, undoable, and re-editable later.
+- Presets and edits must round-trip through the design JSON and the undo stack.
+
+## Phase 3: Templates and brand (M3)
+- Template gallery with search, categories, tags, thumbnails (saved design JSON)
 - Seed 20–30 original templates (social, slide, poster, flyer, resume, invite)
 - Magic Resize: re-flow rules per target size (scale + anchor by object role: background, headline, logo)
-- Brand Kit: logos, color palette, font set, one-click apply
-- Photo editing: crop, filters, brightness/contrast/blur
+- Brand Kit: logos, colors, fonts, one-click apply; photo presets can be part of a brand kit
 
-## Phase 3: Asset library (M3)
+## Phase 4: Asset library (M4)
 - Uploads with validation and size limits, stored in S3/R2
 - Stock search: Unsplash and Pexels APIs; icons from open sets (Lucide, Tabler)
 - Elements: shapes, lines, frames, grids, stickers, simple charts
-- Custom font upload (woff2) with loading
+- Custom font upload (woff2)
 - Licensing metadata on every asset; background remover (`@imgly/background-removal`, client-side)
 
-## Phase 4: Accounts, storage, publishing (M5, M4)
+## Phase 5: Export, accounts, sharing (M5)
 - Auth (Supabase or Lucia), Postgres for users/designs, folders, trash
-- Share links: view / comment / edit, with role-based access
-- Teams and shared brand kits
+- Share by link: view-only and "make a copy" (no live co-editing)
 - Export pipeline: server render for large PDFs; GIF and MP4 of simple page sequences
 - One-page website publish (static HTML from a design)
 
-## Phase 5: Collaboration (M6)
-- Yjs doc per design; sync object list over WebSocket
-- Presence, cursors, comments with @mentions, notifications
-- Approvals: request review, approve/reject
-
-## Phase 6: AI, presentations, video (M7)
-- Present mode, presenter notes
-- Animations: page transitions and element-level motion
+## Phase 6: AI, presentations, video (M6)
+- Present mode, presenter notes, page transitions, element motion
 - Video timeline editor, WASM or server rendering via job queue
-- AI (bring-your-own-key, provider-agnostic): text write/rewrite, image generation, background/object removal, prompt-to-design
-- Needs queueing, rate limits, moderation hooks
+- AI (bring-your-own-key, optional): text write/rewrite, image generation, object removal, prompt-to-design
 
-## Later / out of scope for now
+## Later / optional
+- **Collaboration (M7):** comments first (cheap), live co-editing with Yjs only if people ask
 - Print ordering, social scheduling (platform OAuth and vendor deals)
 - Docs and whiteboards
-- Native mobile and desktop apps (responsive web first)
-- App/plugin marketplace (design the editor API so plugins are possible; build later)
+- Native mobile and desktop apps (responsive, touch-friendly web first)
+- Plugin marketplace (keep the editor API clean so plugins are possible)
 
 ## Stack
-- Frontend: Vite, TypeScript, Fabric.js, Zustand for state
-- Backend (Phase 4+): Next.js or Hono, Postgres, S3/R2, Yjs server
+- Frontend: Vite, TypeScript, Fabric.js for the canvas, a custom WebGL pipeline for photo edits, Zustand for state
+- Backend (Phase 5+): Hono or Next.js, Postgres, S3/R2
 - Hosting: static + API on Vercel or Cloudflare; Docker image for self-host
 
 ## Key decisions
-1. **Engine:** stay on Fabric.js. Revisit only if performance fails past ~500 objects or video is needed.
-2. **Template format:** plain design JSON, so users can share templates as files.
-3. **Licensing:** app under MIT or AGPL (decide before first public release); bundle only permissively licensed fonts, icons and templates.
-4. **AI:** optional and off by default, so the core stays free of API costs.
+1. **Engine:** stay on Fabric.js for layout; photo edits use our own shader pipeline. Revisit if performance fails past ~500 objects.
+2. **Photo edits are parameters, not pixels.** Keeps files small, edits reversible, presets shareable.
+3. **Template and preset format:** plain JSON files users can share.
+4. **Licensing:** app under MIT or AGPL (decide before first public release); bundle only permissively licensed fonts, icons, presets and templates.
+5. **AI:** optional and off by default, so the core stays free of API costs.
 
 ## Next step
-Rest of Phase 1: group/lock/duplicate, snapping guides and zoom, then JPG/SVG/PDF export.
+Phase 1 layout shell (sidebar, contextual toolbar, start screen, autosave), then Phase 2 photo editor, since both drive the ease-of-use goal.
