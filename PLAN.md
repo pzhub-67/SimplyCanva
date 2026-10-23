@@ -16,6 +16,45 @@ Built against `canva-feature-reference.md`.
 
 Process rule: any new focus the owner states in chat is added to this list in the same session.
 
+## Handoff notes (read this first when resuming)
+
+**What exists.** "Canva Lite": a mobile-first browser design editor. Vite 5 + TypeScript (strict) + Fabric.js 5.3, tests with vitest, end-to-end smoke tests with Playwright (python). Repo root `canva-lite/`, branch `main`, small commits with `Co-Authored-By` and `Claude-Session` trailers.
+
+**Commands**
+- `npm run dev` dev server, `npm test` unit tests (12), `npm run build` typecheck + bundle.
+- `npm run artifact` builds `dist/artifact.html`, a single self-contained page. Publish it with the Artifact tool using that same file path (keeps the same link). The owner opens that link on a phone.
+- Smoke tests: `python3 scripts/smoke/make_test_png.py` once, then `python3 scripts/smoke/smokeN.py` after `npm run artifact`. They drive headless Chromium at phone size (`--use-gl=swiftshader` so WebGL works): smoke4 crop flow, smoke5 home screen + zoom buttons, smoke6 pinch, smoke7 objects beyond page + export, smoke8 export while zoomed, smoke9 snapping, smoke10 align/lock/group, smoke11 filters + auto, smoke12 style. They read saved designs straight from IndexedDB.
+
+**How to work with the owner (Parker)**
+- On a phone only for now, so verify with headless screenshots and say plainly that it was not tried on a real phone.
+- Keep replies short. Use the `/ponytail` style: minimal code, finish the whole job, small test for non-trivial logic, mark deliberate shortcuts with `shortcut:` comments, end by saying what was skipped and the risks.
+- Never force a choice on open. The editor opens straight into the last design (or a blank 1080x1080). Home is opt-in.
+- Any focus stated in chat goes into "Owner focuses" above in the same session.
+- The artifact viewer blocks downloads, so Export shows the image and says press-and-hold to save; the Download button is hidden when `'claude' in window`. A "download link" warning on publish is expected.
+
+**File map (`src/`)**
+- `main.ts` canvas, view (zoom/pan), page drawing, history, autosave, home screen, selection toolbar, style/align/group/lock, export. `editor.ts` photo edit session (Adjust/Filters/Mine/Crop tabs, Auto, thumbnails, copy/paste edits, presets). `crop.ts` + `cropMath.ts` crop overlay and pure geometry. `adjust.ts` the WebGL shader (`fabric.Image.filters.Adjust`). `photoModel.ts` `PhotoEdit`, 15 adjustments, built-in looks, `effective`, `autoAdjust`. `model.ts` `Design`/`Page` format. `store.ts` IndexedDB. `fonts.ts`, `sizes.ts`, `icons.ts`. `index.html` holds all CSS (theme tokens, light/dark) and markup.
+- The data model block below is the long-term target. What is built: `Design { id, title, pages[] }`, `Page { id, width, height, background, objects }` where `objects` is raw Fabric JSON. Custom per-object fields (`edit`, `orig`, `locked`) are listed in `PROPS` in `main.ts` and must be passed to every `toJSON`.
+
+**Design decisions and gotchas worth remembering**
+- **Canvas fills the stage, the page is drawn inside it.** View = Fabric viewport transform (`fit()` sets it from `vz`, `vx`, `vy`). `raw._renderBackground` draws the page and its shadow; `raw.drawControls` first fades everything outside the page, re-draws the selected object at full strength (clipped to outside the page), draws snapping guides, then the real handles. These two overrides use Fabric internals that are not in the type defs (`raw` cast at the top of `main.ts`).
+- **Export and thumbnails** go through `pageImage()`, which crops `toDataURL` to the page rectangle and sets `exporting` so the fade, shadow, guides and handles are skipped. Anything outside the page is therefore never exported.
+- **History** is full-JSON snapshots with a `busy` flag and `batch()` to make several changes one undo step. History is not saved, only the current design is.
+- **Saving:** IndexedDB with two stores, `designs` (full) and `meta` (title, thumbnail, size, updated). Autosave is debounced 500 ms and only runs once `live` is true. A blank, never-edited design is not saved. The old localStorage slot (`canva-lite:design`) is migrated once. Last-open id is in localStorage `canva-lite:last`. User presets are in localStorage `canva-lite:presets`.
+- **Photo edits are parameters** (`PhotoEdit`), rendered by one WebGL filter. Crop is the exception: it is baked into pixels from the retained original (`orig.src`) so Fabric clipping and rotation stay simple, and the crop params are stored so it can be re-edited.
+- **Touch:** two-finger pinch/pan is intercepted in the capture phase on `#stage` before Fabric sees it, and anything the first finger started is rolled back (`grab`). Handles are corner-only and shrink with small objects (`before:render` hook).
+- **Mobile layout:** bottom tabs and sheets, a contextual toolbar, `body[data-editing]` hides the top bar and tabs while the photo editor is open, safe-area padding.
+
+**Known shortcuts and risks (fix when they bite)**
+- No WebGL fallback: without WebGL photos show unedited.
+- Resizing the page does not re-flow objects and is not undoable. Only the regular font weight is loaded.
+- Cropped photos store both the cropped and the original pixels, so large photos make saves big (IndexedDB handles it, but there is no quota warning yet).
+- The Style/Align sheets cover the lower half of the screen and can hide the selected item.
+- Snapping works while moving only (not resizing or rotating). One-finger pan is not supported, two fingers pan.
+- Locked items can still be deleted. Text and photos inside a group cannot be edited until ungrouped. Corner radius is rectangles only.
+- Undo does not cross designs or pages.
+- Never tried on a real phone; everything was checked in headless Chromium.
+
 ## Principles
 - **Ease of use beats feature count.** If a feature needs explaining, simplify it before shipping it.
 - **Open source means no plan gating.** SVG export, background remover, brand kit and resize are plain features.

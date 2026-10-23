@@ -1,0 +1,23 @@
+from playwright.sync_api import sync_playwright
+errs=[]
+with sync_playwright() as p:
+    b=p.chromium.launch(args=['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist'])
+    ctx=b.new_context(viewport={'width':390,'height':844},device_scale_factor=2,has_touch=True)
+    pg=ctx.new_page(); pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('file:///home/claude/canva-lite/dist/artifact.html'); pg.wait_for_timeout(800)
+    pg.click('[data-tab="shapes"]'); pg.click('[data-add]'); pg.wait_for_timeout(300)
+    pos=lambda: pg.evaluate("(()=>{const o=document.getElementById('c');return [o.width]})()")
+    s=ctx.new_cdp_session(pg)
+    def t(kind,pts): s.send('Input.dispatchTouchEvent',{'type':kind,'touchPoints':[{'x':x,'y':y,'id':i} for i,(x,y) in enumerate(pts)]})
+    before=pg.inner_text('#zoom-fit')
+    t('touchStart',[(150,300),(240,300)])
+    for k in range(1,9): t('touchMove',[(150-k*8,300),(240+k*8,300)])
+    t('touchEnd',[])
+    pg.wait_for_timeout(400)
+    print('zoom', before,'->',pg.inner_text('#zoom-fit'))
+    pg.screenshot(path='/tmp/claude-0/pinch.png')
+    # one-finger drag after pinch still moves object (not stuck)
+    t('touchStart',[(195,400)]); t('touchMove',[(215,420)]); t('touchEnd',[]); pg.wait_for_timeout(300)
+    print('ok after pinch; undo enabled', not pg.evaluate("document.getElementById('undo').disabled"))
+    b.close()
+print('errors',errs)
