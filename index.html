@@ -383,11 +383,12 @@
   <div id="export" class="overlay" hidden>
     <div class="dialog" role="dialog" aria-labelledby="export-h">
       <h1 id="export-h">Your design is ready</h1>
-      <div class="fmt"><button class="chip" data-fmt="png">PNG</button><button class="chip" data-fmt="jpeg">JPG</button></div>
+      <div class="fmt"><button class="chip" data-fmt="png">PNG</button><button class="chip" data-fmt="jpeg">JPG</button><button class="chip" data-fmt="svg">SVG</button><button class="chip" data-fmt="pdf">PDF</button></div>
       <img id="export-img" alt="Preview of your finished design">
       <button id="export-all" class="btn quiet" data-act="exportAll" hidden>Export all pages</button>
       <div id="export-more"></div>
-      <p>On a phone, press and hold the image to save it to your photos.</p>
+      <p id="export-note">On a phone, press and hold the image to save it to your photos.</p>
+      <button id="export-copy" class="btn quiet" hidden>Copy SVG code</button>
       <div class="row">
         <a id="export-dl" class="btn" download="design.png">Download PNG</a>
         <button class="btn quiet" data-act="closeExport">Close</button>

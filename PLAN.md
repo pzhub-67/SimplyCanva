@@ -48,6 +48,7 @@ Process rule: any new focus the owner states in chat is added to this list in th
 - **Mobile layout:** bottom tabs and sheets, a contextual toolbar, `body[data-editing]` hides the top bar and tabs while the photo editor is open, safe-area padding.
 
 **Known shortcuts and risks (fix when they bite)**
+- SVG export of a photo uses Fabric's own image export; photo slider edits may not appear in the SVG (PNG, JPG and PDF always include them). Text in SVG/PDF is not selectable (PDF is images).
 - No WebGL fallback: without WebGL photos show unedited.
 - Resizing the page does not re-flow objects and is not undoable. Only the regular font weight is loaded.
 - Cropped photos store both the cropped and the original pixels, so large photos make saves big (IndexedDB handles it, but there is no quota warning yet).
@@ -112,7 +113,8 @@ BrandKit { id, logos[], colors[], fonts[] }
 - Done: multi-page (Page N of M chip opens a strip: switch, add, duplicate, delete; all pages share one size), JPG export, Export all pages, Style/Align sheets slide the page up so the selected item stays visible
 - Done: one-finger pan on empty space when zoomed in (not zoomed: draws a selection box), page reorder (Move earlier / Move later)
 - Done: gradient fills (Sunset, Ocean, Mint, Night) in the Style menu; smoke15
-- Next: snapping while resizing, SVG and PDF export
+- Done: SVG export (with Copy code, since downloads are blocked in the viewer) and PDF export (all pages, one JPEG per page, tiny writer in `src/pdf.ts`, no library); smoke16
+- Next: snapping while resizing
 
 ## Phase 2: Photo editor and presets (M2)
 Modeled on iPhone Photos for simplicity and Lightroom for presets.

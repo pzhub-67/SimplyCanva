@@ -4,6 +4,7 @@ import { FONTS, loadFont } from './fonts';
 import { ICONS, svg } from './icons';
 import { Design, FabricJSON, Page, fabricToPage, newDesign, pageToFabric } from './model';
 import { SIZES } from './sizes';
+import { dataUrlBytes, makePdf } from './pdf';
 import { deleteDesign, getDesign, lastId, listMeta, migrateOld, putDesign, renameDesign, setLastId } from './store';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -739,30 +740,54 @@ all('[data-new]').forEach(b => { b.onclick = () => { const s = SIZES[Number(b.da
 
 // --- export ----------------------------------------------------------------
 // Downloads can be blocked in embedded viewers, so show the image too: press and hold saves it on a phone.
-let fmt: 'png' | 'jpeg' = 'png';
-const exportPNG = () => {
-  const url = pageImage(fmt, logical.w, 0.92);
-  $<HTMLImageElement>('export-img').src = url;
-  const dl = $<HTMLAnchorElement>('export-dl');
-  dl.href = url; dl.download = fmt === 'png' ? 'design.png' : 'design.jpg';
-  dl.textContent = fmt === 'png' ? 'Download PNG' : 'Download JPG';
-  dl.hidden = 'claude' in window; // embedded artifact viewers block downloads; press-and-hold on the image still works
-  all('[data-fmt]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fmt === fmt)));
-  $('export-all').hidden = design.pages.length < 2;
-  $('export-more').replaceChildren();
-  $('export').hidden = false;
+type Fmt = 'png' | 'jpeg' | 'svg' | 'pdf';
+let fmt: Fmt = 'png';
+let svgText = '';
+const pageSvg = () => {
+  exporting = true;
+  try { return c.toSVG({ viewBox: { x: 0, y: 0, width: logical.w, height: logical.h }, width: logical.w, height: logical.h }); } finally { exporting = false; }
 };
-all('[data-fmt]').forEach(b => { b.onclick = () => { fmt = b.dataset.fmt as typeof fmt; exportPNG(); }; });
+const exportPNG = async () => {
+  const dl = $<HTMLAnchorElement>('export-dl'), img = $<HTMLImageElement>('export-img');
+  all('[data-fmt]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fmt === fmt)));
+  $('export-all').hidden = design.pages.length < 2 || fmt === 'pdf' || fmt === 'svg';
+  $('export-more').replaceChildren();
+  $('export-copy').hidden = fmt !== 'svg';
+  $('export-note').textContent = fmt === 'pdf' ? `PDF with ${design.pages.length} page${design.pages.length > 1 ? 's' : ''}. The preview shows the current page.`
+    : fmt === 'svg' ? 'SVG of the current page. Photos are embedded.' : 'On a phone, press and hold the image to save it to your photos.';
+  $('export').hidden = false;
+  commitPage();
+  dl.hidden = 'claude' in window; // embedded artifact viewers block downloads; press-and-hold on the image still works
+  if (fmt === 'svg') {
+    svgText = pageSvg();
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
+    dl.href = img.src; dl.download = 'design.svg'; dl.textContent = 'Download SVG';
+  } else if (fmt === 'pdf') {
+    const shots = await Promise.all(design.pages.map((pg, i) => i === pageIdx ? Promise.resolve(pageImage('jpeg', logical.w, 0.92)) : renderPage(pg, logical.w, 'jpeg', 0.92)));
+    img.src = shots[pageIdx];
+    const blob = new Blob([makePdf(shots.map(s => ({ jpeg: dataUrlBytes(s), w: logical.w, h: logical.h }))) as BlobPart], { type: 'application/pdf' });
+    dl.href = URL.createObjectURL(blob); dl.download = 'design.pdf'; dl.textContent = 'Download PDF';
+  } else {
+    const url = pageImage(fmt, logical.w, 0.92);
+    img.src = url; dl.href = url; dl.download = fmt === 'png' ? 'design.png' : 'design.jpg';
+    dl.textContent = fmt === 'png' ? 'Download PNG' : 'Download JPG';
+  }
+};
+all('[data-fmt]').forEach(b => { b.onclick = () => { fmt = b.dataset.fmt as Fmt; void exportPNG(); }; });
+$('export-copy').onclick = () => {
+  navigator.clipboard?.writeText(svgText).then(() => toast('SVG code copied'), () => toast('Could not copy here. Select and copy it from the page instead.'));
+};
 // All pages, one image each (press and hold to save).
 const exportAll = async () => {
   commitPage();
+  const raster = fmt === 'jpeg' ? 'jpeg' : 'png';
   const box = $('export-more');
   box.replaceChildren(Object.assign(document.createElement('p'), { textContent: 'Rendering pages…' }));
   const imgs: HTMLElement[] = [];
   for (let i = 0; i < design.pages.length; i++) {
     const im = document.createElement('img');
     im.alt = `Page ${i + 1}`;
-    im.src = i === pageIdx ? pageImage(fmt, logical.w, 0.92) : await renderPage(design.pages[i], logical.w, fmt, 0.92);
+    im.src = i === pageIdx ? pageImage(raster, logical.w, 0.92) : await renderPage(design.pages[i], logical.w, raster, 0.92);
     imgs.push(im);
   }
   box.replaceChildren(...imgs);
@@ -774,7 +799,7 @@ const images = () => c.getActiveObjects().filter((o): o is PhotoImage => o.type 
 c.on('mouse:dblclick', e => { if (e.target?.type === 'image') editor.open(e.target as PhotoImage); });
 
 const actions: Record<string, () => void> = {
-  undo, redo, del, dup, export: exportPNG, home: () => void showHome(), closeSheet,
+  undo, redo, del, dup, export: () => void exportPNG(), home: () => void showHome(), closeSheet,
   style: () => { syncStyle(); openSheet('style'); }, pages: () => { openSheet('pages'); void renderPages(); }, addPage: () => addPage(false), dupPage: () => addPage(true), delPage: deletePage, pageLeft: () => movePage(-1), pageRight: () => movePage(1), exportAll: () => void exportAll(),
   lock: toggleLock, group: groupSel, align: () => openSheet('align'),
   edit: () => { const [img] = images(); if (img) editor.open(img); },
