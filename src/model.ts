@@ -1,7 +1,7 @@
 // Canonical design format. Every feature (templates, resize, collab) reads and writes this.
 // shortcut: objects hold raw Fabric JSON, swap for our own object schema if we ever leave Fabric.
 export type Obj = Record<string, unknown>;
-export interface Page { id: string; width: number; height: number; background: string; objects: Obj[] }
+export interface Page { id: string; width: number; height: number; background: string; objects: Obj[]; thumb?: string }
 export interface Design { id: string; title: string; pages: Page[] }
 export interface FabricJSON { objects: Obj[]; background?: string }
 

@@ -2,7 +2,7 @@ import { fabric } from 'fabric';
 import { PhotoImage, initEditor } from './editor';
 import { FONTS, loadFont } from './fonts';
 import { ICONS, svg } from './icons';
-import { Design, FabricJSON, fabricToPage, newDesign, pageToFabric } from './model';
+import { Design, FabricJSON, Page, fabricToPage, newDesign, pageToFabric } from './model';
 import { SIZES } from './sizes';
 import { deleteDesign, getDesign, lastId, listMeta, migrateOld, putDesign, renameDesign, setLastId } from './store';
 
@@ -240,8 +240,14 @@ const toast = (msg: string, action?: { label: string; run: () => void }) => {
 // Designs are saved to IndexedDB (see store.ts). A blank design that was never touched is not saved, so Home stays tidy.
 let stored = false; // true once this design exists in the store
 const thumbOf = () => pageImage('jpeg', Math.round((logical.w * 240) / Math.max(logical.w, logical.h)), 0.7);
+let pageIdx = 0;
+// Copy what is on the canvas into the current page. All pages share one size.
+const commitPage = () => {
+  design.pages[pageIdx] = fabricToPage(design.pages[pageIdx], c.toJSON(PROPS) as unknown as FabricJSON, logical.w, logical.h);
+  design.pages.forEach(p => { p.width = logical.w; p.height = logical.h; });
+};
 const save = async () => {
-  design.pages[0] = fabricToPage(design.pages[0], c.toJSON(PROPS) as unknown as FabricJSON, logical.w, logical.h);
+  commitPage();
   if (!stored && !c.getObjects().length) return;
   try {
     await putDesign(design, { id: design.id, title: design.title, updated: Date.now(), thumb: thumbOf(), w: logical.w, h: logical.h });
@@ -279,8 +285,10 @@ const redo = () => restore(pos + 1);
 
 // --- sheets (bottom panel) -----------------------------------------------
 let openName = '';
+let viewBefore: { vz: number; vx: number; vy: number } | null = null;
 const closeSheet = () => {
   openName = '';
+  if (viewBefore) { ({ vz, vx, vy } = viewBefore); viewBefore = null; fit(); }
   $('sheet').hidden = true;
   all('[data-tab]').forEach(t => t.setAttribute('aria-pressed', 'false'));
 };
@@ -295,6 +303,13 @@ const openSheet = (name: string) => {
     if (!s.hidden) $('sheet-title').textContent = s.dataset.title ?? '';
   });
   all('[data-tab]').forEach(t => t.setAttribute('aria-pressed', String(t.dataset.tab === name)));
+  // Slide the page up if the sheet would cover the selected item.
+  const o = c.getActiveObject();
+  if ((name === 'style' || name === 'align') && o) {
+    const v = c.viewportTransform!, mid = v[5] + o.getCenterPoint().y * v[3];
+    const room = (stage.clientHeight - $('sheet').offsetHeight) / 2;
+    if (mid > room) { viewBefore = { vz, vx, vy }; vy -= mid - room; fit(); }
+  }
 };
 c.on('mouse:down', closeSheet);
 
@@ -558,25 +573,80 @@ const startNew = (w: number, h: number) => {
   clearTimeout(saveTimer);
   busy = true; c.clear(); busy = false;
   setBg('#ffffff', false);
-  design = newDesign(w, h); logical = { w, h }; hist = []; pos = -1; stored = false;
+  design = newDesign(w, h); logical = { w, h }; hist = []; pos = -1; stored = false; pageIdx = 0;
   vz = 1; vx = 0; vy = 0; fit(); snap(); live = true;
-  $('home').hidden = true; syncUI();
+  $('home').hidden = true; syncUI(); updatePager();
+};
+// Load page `i` of the open design onto the canvas. Undo history starts fresh for each page.
+const showPage = (i: number, then?: () => void) => {
+  const page = design.pages[i];
+  pageIdx = i; logical = { w: page.width, h: page.height };
+  vz = 1; vx = 0; vy = 0;
+  busy = true;
+  c.loadFromJSON(pageToFabric(page), async () => {
+    busy = false; relock(); hist = []; pos = -1;
+    fit(); setBg(page.background, false);
+    await ensureFonts(page.objects.map(o => o.fontFamily).filter((f): f is string => typeof f === 'string'));
+    snap(); live = true; syncUI(); updatePager(); then?.();
+  });
 };
 const loadDesign = (d: Design) => {
   clearTimeout(saveTimer);
   try {
-    design = d;
-    const page = d.pages[0];
-    logical = { w: page.width, h: page.height };
-    vz = 1; vx = 0; vy = 0;
-    busy = true;
-    c.loadFromJSON(pageToFabric(page), async () => {
-      busy = false; relock(); hist = []; pos = -1; stored = true;
-      fit(); setBg(page.background, false);
-      await ensureFonts(page.objects.map(o => o.fontFamily).filter((f): f is string => typeof f === 'string'));
-      snap(); live = true; setLastId(d.id); $('home').hidden = true; syncUI();
-    });
+    design = d; stored = true;
+    showPage(0, () => { setLastId(d.id); $('home').hidden = true; });
   } catch { toast('That design could not be opened.'); startNew(1080, 1080); }
+};
+
+// --- pages -------------------------------------------------------------------------
+const updatePager = () => { $('pager').textContent = `Page ${pageIdx + 1} of ${design.pages.length}`; };
+const leavePage = () => { clearTimeout(saveTimer); commitPage(); design.pages[pageIdx].thumb = thumbOf(); };
+const gotoPage = (i: number) => {
+  if (i === pageIdx || !design.pages[i]) return;
+  leavePage(); showPage(i, () => { autosave(); void renderPages(); });
+};
+const addPage = (copy: boolean) => {
+  leavePage();
+  const cur = design.pages[pageIdx];
+  const next: Page = copy
+    ? { ...JSON.parse(JSON.stringify(cur)) as Page, id: crypto.randomUUID() }
+    : { id: crypto.randomUUID(), width: logical.w, height: logical.h, background: '#ffffff', objects: [] };
+  design.pages.splice(pageIdx + 1, 0, next);
+  showPage(pageIdx + 1, () => { autosave(); void renderPages(); });
+};
+const deletePage = () => {
+  if (design.pages.length < 2) { toast('A design needs at least one page.'); return; }
+  clearTimeout(saveTimer);
+  design.pages.splice(pageIdx, 1);
+  showPage(Math.min(pageIdx, design.pages.length - 1), () => { autosave(); void renderPages(); });
+};
+// Draw any page offscreen, used for page thumbnails and "export all".
+const renderPage = async (page: Page, outW: number, format: 'png' | 'jpeg', quality = 0.7) => {
+  await ensureFonts(page.objects.map(o => o.fontFamily).filter((f): f is string => typeof f === 'string'));
+  return new Promise<string>(res => {
+    const k = outW / page.width;
+    const sc = new fabric.StaticCanvas(null, { width: outW, height: Math.round(page.height * k), renderOnAddRemove: false });
+    sc.setZoom(k);
+    sc.loadFromJSON(pageToFabric(page), () => { sc.renderAll(); const url = sc.toDataURL({ format, quality }); sc.dispose(); res(url); });
+  });
+};
+const renderPages = async () => {
+  const strip = $('page-strip');
+  commitPage();
+  const cards = design.pages.map((pg, i) => {
+    const b = document.createElement('button');
+    b.className = 'chip th'; b.setAttribute('aria-pressed', String(i === pageIdx)); b.setAttribute('aria-label', `Page ${i + 1}`);
+    const im = document.createElement('img'); im.alt = ''; if (pg.thumb) im.src = pg.thumb;
+    b.append(im, String(i + 1));
+    b.onclick = () => gotoPage(i);
+    return { b, im, pg, i };
+  });
+  strip.replaceChildren(...cards.map(x => x.b));
+  updatePager();
+  for (const { im, pg, i } of cards) {
+    if (i === pageIdx) im.src = thumbOf();
+    else if (!pg.thumb) { pg.thumb = await renderPage(pg, 160, 'jpeg'); im.src = pg.thumb; }
+  }
 };
 const ago = (t: number) => {
   const m = Math.round((Date.now() - t) / 60000);
@@ -626,13 +696,33 @@ all('[data-new]').forEach(b => { b.onclick = () => { const s = SIZES[Number(b.da
 
 // --- export ----------------------------------------------------------------
 // Downloads can be blocked in embedded viewers, so show the image too: press and hold saves it on a phone.
+let fmt: 'png' | 'jpeg' = 'png';
 const exportPNG = () => {
-  const url = pageImage('png', logical.w);
+  const url = pageImage(fmt, logical.w, 0.92);
   $<HTMLImageElement>('export-img').src = url;
   const dl = $<HTMLAnchorElement>('export-dl');
-  dl.href = url;
+  dl.href = url; dl.download = fmt === 'png' ? 'design.png' : 'design.jpg';
+  dl.textContent = fmt === 'png' ? 'Download PNG' : 'Download JPG';
   dl.hidden = 'claude' in window; // embedded artifact viewers block downloads; press-and-hold on the image still works
+  all('[data-fmt]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fmt === fmt)));
+  $('export-all').hidden = design.pages.length < 2;
+  $('export-more').replaceChildren();
   $('export').hidden = false;
+};
+all('[data-fmt]').forEach(b => { b.onclick = () => { fmt = b.dataset.fmt as typeof fmt; exportPNG(); }; });
+// All pages, one image each (press and hold to save).
+const exportAll = async () => {
+  commitPage();
+  const box = $('export-more');
+  box.replaceChildren(Object.assign(document.createElement('p'), { textContent: 'Rendering pages…' }));
+  const imgs: HTMLElement[] = [];
+  for (let i = 0; i < design.pages.length; i++) {
+    const im = document.createElement('img');
+    im.alt = `Page ${i + 1}`;
+    im.src = i === pageIdx ? pageImage(fmt, logical.w, 0.92) : await renderPage(design.pages[i], logical.w, fmt, 0.92);
+    imgs.push(im);
+  }
+  box.replaceChildren(...imgs);
 };
 
 // --- wiring ----------------------------------------------------------------
@@ -642,7 +732,8 @@ c.on('mouse:dblclick', e => { if (e.target?.type === 'image') editor.open(e.targ
 
 const actions: Record<string, () => void> = {
   undo, redo, del, dup, export: exportPNG, home: () => void showHome(), closeSheet,
-  style: () => { syncStyle(); openSheet('style'); }, lock: toggleLock, group: groupSel, align: () => openSheet('align'),
+  style: () => { syncStyle(); openSheet('style'); }, pages: () => { openSheet('pages'); void renderPages(); }, addPage: () => addPage(false), dupPage: () => addPage(true), delPage: deletePage, exportAll: () => void exportAll(),
+  lock: toggleLock, group: groupSel, align: () => openSheet('align'),
   edit: () => { const [img] = images(); if (img) editor.open(img); },
   copyEdits: () => { const [img] = images(); if (img) editor.copyEdits(img); },
   pasteEdits: () => editor.pasteEdits(images()),

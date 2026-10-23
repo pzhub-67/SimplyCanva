@@ -23,7 +23,7 @@ Process rule: any new focus the owner states in chat is added to this list in th
 **Commands**
 - `npm run dev` dev server, `npm test` unit tests (12), `npm run build` typecheck + bundle.
 - `npm run artifact` builds `dist/artifact.html`, a single self-contained page. Publish it with the Artifact tool using that same file path (keeps the same link). The owner opens that link on a phone.
-- Smoke tests: `python3 scripts/smoke/make_test_png.py` once, then `python3 scripts/smoke/smokeN.py` after `npm run artifact`. They drive headless Chromium at phone size (`--use-gl=swiftshader` so WebGL works): smoke4 crop flow, smoke5 home screen + zoom buttons, smoke6 pinch, smoke7 objects beyond page + export, smoke8 export while zoomed, smoke9 snapping, smoke10 align/lock/group, smoke11 filters + auto, smoke12 style. They read saved designs straight from IndexedDB.
+- Smoke tests: `python3 scripts/smoke/make_test_png.py` once, then `python3 scripts/smoke/smokeN.py` after `npm run artifact`. They drive headless Chromium at phone size (`--use-gl=swiftshader` so WebGL works): smoke4 crop flow, smoke5 home screen + zoom buttons, smoke6 pinch, smoke7 objects beyond page + export, smoke8 export while zoomed, smoke9 snapping, smoke10 align/lock/group, smoke11 filters + auto, smoke12 style, smoke13 multi-page + JPG + export all. They read saved designs straight from IndexedDB.
 
 **How to work with the owner (Parker)**
 - On a phone only for now, so verify with headless screenshots and say plainly that it was not tried on a real phone.
@@ -49,7 +49,7 @@ Process rule: any new focus the owner states in chat is added to this list in th
 - No WebGL fallback: without WebGL photos show unedited.
 - Resizing the page does not re-flow objects and is not undoable. Only the regular font weight is loaded.
 - Cropped photos store both the cropped and the original pixels, so large photos make saves big (IndexedDB handles it, but there is no quota warning yet).
-- The Style/Align sheets cover the lower half of the screen and can hide the selected item.
+- Page thumbnails are cached on each page (`Page.thumb`) and only refreshed when you leave a page, so they can be slightly stale.
 - Snapping works while moving only (not resizing or rotating). One-finger pan is not supported, two fingers pan.
 - Locked items can still be deleted. Text and photos inside a group cannot be edited until ungrouped. Corner radius is rectangles only.
 - Undo does not cross designs or pages.
@@ -107,8 +107,8 @@ BrandKit { id, logos[], colors[], fonts[] }
 - Done: Home screen with saved designs (thumbnails, rename, delete) on IndexedDB; two-finger pinch/pan, zoom buttons, Fit; corner-only handles that scale with the object
 - Done: objects can sit outside the page (faded, full when selected, cropped from export); snapping guides to the page and other objects
 - Done: group/ungroup, lock/unlock, Align menu (page for one item, each other for several); Style menu with opacity, corner radius (rectangles), shadow (None/Soft/Hard) and flip
-- Next: multi-page (page strip), gradients, a style sheet that doesn't cover the selected item, snapping while resizing, one-finger pan
-- Next: export JPG, SVG, PDF
+- Done: multi-page (Page N of M chip opens a strip: switch, add, duplicate, delete; all pages share one size), JPG export, Export all pages, Style/Align sheets slide the page up so the selected item stays visible
+- Next: gradients, snapping while resizing, one-finger pan, SVG and PDF export, page reorder
 
 ## Phase 2: Photo editor and presets (M2)
 Modeled on iPhone Photos for simplicity and Lightroom for presets.
@@ -185,4 +185,4 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 5. **AI:** optional and off by default, so the core stays free of API costs.
 
 ## Next step
-Phase 1 and most of Phase 2 are built. Next: multi-page, templates, JPG/PDF export.
+Phase 1 and most of Phase 2 are built. Next: templates and brand kit (Phase 3), then asset library. Smaller leftovers are listed under Phase 1 "Next".
