@@ -20,6 +20,8 @@ Process rule: any new focus the owner states in chat is added to this list in th
 
 **What exists.** "Canva Lite": a mobile-first browser design editor. Vite 5 + TypeScript (strict) + Fabric.js 5.3, tests with vitest, end-to-end smoke tests with Playwright (python). Repo root `canva-lite/`, branch `main`, small commits with `Co-Authored-By` and `Claude-Session` trailers.
 
+**Repo:** https://github.com/pzhub-67/SimplyCanva (public, branch `main`). Rule from the owner: commit and `git push origin HEAD:main` after every step. Push from `canva-lite/` (remote `origin`); GitHub redirects the lower-case name.
+
 **Commands**
 - `npm run dev` dev server, `npm test` unit tests (12), `npm run build` typecheck + bundle.
 - `npm run artifact` builds `dist/artifact.html`, a single self-contained page. Publish it with the Artifact tool using that same file path (keeps the same link). The owner opens that link on a phone.
@@ -181,7 +183,7 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 1. **Engine:** stay on Fabric.js for layout; photo edits use our own shader pipeline. Revisit if performance fails past ~500 objects.
 2. **Photo edits are parameters, not pixels.** Keeps files small, edits reversible, presets shareable.
 3. **Template and preset format:** plain JSON files users can share.
-4. **Licensing:** app under MIT or AGPL (decide before first public release); bundle only permissively licensed fonts, icons, presets and templates.
+4. **Licensing:** the GitHub repo `pzhub-67/SimplyCanva` is GPL-3.0 (its LICENSE file); keep that unless the owner changes it; bundle only permissively licensed fonts, icons, presets and templates.
 5. **AI:** optional and off by default, so the core stays free of API costs.
 
 ## Next step
