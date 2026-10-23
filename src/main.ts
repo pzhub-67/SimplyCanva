@@ -412,6 +412,42 @@ const groupSel = () => {
   });
   c.requestRenderAll(); syncUI();
 };
+// --- style: opacity, corners, shadow, flip -------------------------------------
+const SHADOWS: Record<string, fabric.IShadowOptions | null> = {
+  None: null,
+  Soft: { color: 'rgba(0,0,0,0.35)', blur: 24, offsetX: 0, offsetY: 8 },
+  Hard: { color: 'rgba(0,0,0,0.5)', blur: 0, offsetX: 10, offsetY: 10 },
+};
+const shadowName = (o: fabric.Object) => { const s = o.shadow as fabric.Shadow | null; return !s ? 'None' : s.blur === 0 ? 'Hard' : 'Soft'; };
+const styled = (fn: (o: fabric.Object) => void, commit: boolean) => {
+  const objs = c.getActiveObjects();
+  if (!objs.length) return;
+  objs.forEach(fn); c.requestRenderAll();
+  if (commit) snap();
+};
+const opEl = $<HTMLInputElement>('st-op'), radEl = $<HTMLInputElement>('st-rad');
+opEl.oninput = () => { $('st-op-v').textContent = opEl.value; styled(o => o.set('opacity', Number(opEl.value) / 100), false); };
+opEl.onchange = () => styled(() => {}, true);
+const radOf = (o: fabric.Object) => { const r = o as fabric.Rect; return Math.min(r.width ?? 1, r.height ?? 1) / 2; };
+radEl.oninput = () => { $('st-rad-v').textContent = radEl.value; styled(o => { if (o.type === 'rect') { const r = Number(radEl.value) / 100 * radOf(o); (o as fabric.Rect).set({ rx: r, ry: r }); } }, false); };
+radEl.onchange = () => styled(() => {}, true);
+$('st-shadow').replaceChildren(...Object.keys(SHADOWS).map(name => {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = name; b.dataset.shadow = name;
+  b.onclick = () => { const s = SHADOWS[name]; styled(o => { o.set('shadow', s ? new fabric.Shadow(s) : (null as unknown as string)); }, true); syncStyle(); };
+  return b;
+}));
+all('[data-flip]').forEach(b => { b.onclick = () => styled(o => { if (b.dataset.flip === 'x') o.set('flipX', !o.flipX); else o.set('flipY', !o.flipY); }, true); });
+const syncStyle = () => {
+  const objs = c.getActiveObjects(), o = objs[0];
+  if (!o) return;
+  opEl.value = String(Math.round((o.opacity ?? 1) * 100)); $('st-op-v').textContent = opEl.value;
+  const rects = objs.every(x => x.type === 'rect');
+  $('st-rad-row').hidden = !rects;
+  if (rects) { radEl.value = String(Math.round(((o as fabric.Rect).rx ?? 0) / radOf(o) * 100)); $('st-rad-v').textContent = radEl.value; }
+  all('[data-shadow]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.shadow === shadowName(o))));
+};
+
 type Edge = 'l' | 'c' | 'r' | 't' | 'm' | 'b';
 // One object aligns to the page; several align to each other.
 const align = (edge: Edge) => {
@@ -606,7 +642,7 @@ c.on('mouse:dblclick', e => { if (e.target?.type === 'image') editor.open(e.targ
 
 const actions: Record<string, () => void> = {
   undo, redo, del, dup, export: exportPNG, home: () => void showHome(), closeSheet,
-  lock: toggleLock, group: groupSel, align: () => openSheet('align'),
+  style: () => { syncStyle(); openSheet('style'); }, lock: toggleLock, group: groupSel, align: () => openSheet('align'),
   edit: () => { const [img] = images(); if (img) editor.open(img); },
   copyEdits: () => { const [img] = images(); if (img) editor.copyEdits(img); },
   pasteEdits: () => editor.pasteEdits(images()),

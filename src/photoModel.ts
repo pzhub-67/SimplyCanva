@@ -58,3 +58,18 @@ export const effective = (e: PhotoEdit | undefined, presets: Preset[]): Adj => {
 export const isNeutral = (a: Adj) => KEYS.every(k => a[k] === 0);
 export const isEdited = (e: PhotoEdit | undefined) =>
   !!e && (!!e.crop || (!!e.filter && e.filter.amount > 0) || KEYS.some(k => (e.adj[k] ?? 0) !== 0));
+
+// Auto-enhance: look at brightness (0-1) and colour of the photo and pick slider values a person could then tweak.
+export interface PhotoStats { mean: number; p5: number; p95: number; sat: number }
+export const autoAdjust = (s: PhotoStats): Partial<Adj> => {
+  const out: Partial<Adj> = {};
+  const set = (k: AdjKey, v: number) => { if (v) out[k] = clamp(Math.round(v), -100, 100); };
+  set('exposure', clamp((0.46 - s.mean) * 120, -40, 40));
+  set('shadows', s.p5 < 0.08 ? clamp((0.08 - s.p5) * 300, 0, 40) : 0);
+  set('highlights', s.p95 > 0.92 ? -clamp((s.p95 - 0.92) * 400, 0, 40) : 0);
+  set('contrast', s.p95 - s.p5 < 0.65 ? clamp((0.65 - (s.p95 - s.p5)) * 80, 0, 25) : 0);
+  set('vibrance', 15);
+  set('saturation', s.sat < 0.3 ? 8 : 0);
+  set('definition', 10);
+  return out;
+};

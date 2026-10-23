@@ -67,7 +67,8 @@ BrandKit { id, logos[], colors[], fonts[] }
 - Done: mobile-first shell (top bar, bottom tabs and sheets, contextual toolbar, start screen), autosave, zoom to fit, drag-drop and paste images, photo downscale on import, duplicate, keyboard shortcuts, light/dark theme
 - Done (Phase 1 additions): group/ungroup, lock/unlock, Align menu (page for one item, each other for several)
 - Next: filter thumbnails
-- Next: multi-page (page strip), opacity, flip, corner radius, shadows, gradients
+- Done: Style menu with opacity, corner radius (rectangles), shadow (None/Soft/Hard) and flip
+- Next: multi-page (page strip), gradients, style sheet that doesn't cover the selected item
 - Next: export JPG, SVG, PDF
 
 ## Phase 2: Photo editor and presets (M2)
@@ -144,4 +145,4 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 5. **AI:** optional and off by default, so the core stays free of API costs.
 
 ## Next step
-Phase 1 and most of Phase 2 are built. Next: filter thumbnails and auto-enhance, then templates.
+Phase 1 and most of Phase 2 are built. Next: multi-page, templates, JPG/PDF export.

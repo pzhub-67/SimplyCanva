@@ -3,7 +3,7 @@
 import { fabric } from 'fabric';
 import { makeAdjustFilter } from './adjust';
 import { initCropper, renderCropped } from './crop';
-import { ADJ, AdjKey, BUILTIN, PhotoEdit, Preset, effective, isEdited, isNeutral } from './photoModel';
+import { ADJ, AdjKey, BUILTIN, PhotoEdit, PhotoStats, Preset, autoAdjust, effective, isEdited, isNeutral } from './photoModel';
 
 // `orig` holds the untouched photo once a crop has been applied, so the crop can be re-edited or undone.
 export type PhotoImage = fabric.Image & { edit?: PhotoEdit; orig?: { src: string } };
@@ -24,6 +24,30 @@ export const applyEdit = (img: PhotoImage, e: PhotoEdit | undefined) => {
   const p = effective(e, allPresets());
   img.filters = isNeutral(p) ? [] : [makeAdjustFilter(p)];
   img.applyFilters();
+};
+
+// The photo as loaded, without slider filters, drawn small: used for filter previews and auto-enhance.
+const smallOf = (img: fabric.Image, side: number) => {
+  const el = ((img as unknown as { _originalElement?: CanvasImageSource })._originalElement ?? img.getElement()) as HTMLImageElement | HTMLCanvasElement;
+  const w = (el as HTMLImageElement).naturalWidth || el.width, h = (el as HTMLImageElement).naturalHeight || el.height;
+  const cv = Object.assign(document.createElement('canvas'), { width: side, height: side });
+  const k = Math.max(side / w, side / h); // cover-crop to a square
+  cv.getContext('2d')!.drawImage(el, (side - w * k) / 2, (side - h * k) / 2, w * k, h * k);
+  return cv;
+};
+const statsOf = (img: fabric.Image): PhotoStats => {
+  const cv = smallOf(img, 64);
+  const d = cv.getContext('2d')!.getImageData(0, 0, 64, 64).data;
+  const hist = new Array<number>(256).fill(0);
+  let sum = 0, sat = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    const l = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+    hist[Math.round(l)]++; sum += l; n++;
+    const mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]);
+    sat += mx ? (mx - mn) / mx : 0;
+  }
+  const pct = (f: number) => { let a = 0; for (let i = 0; i < 256; i++) { a += hist[i]; if (a >= n * f) return i / 255; } return 1; };
+  return { mean: sum / n / 255, p5: pct(0.05), p95: pct(0.95), sat: sat / n };
 };
 
 const setSrc = (img: fabric.Image, url: string) => new Promise<void>(res => { img.setSrc(url, () => res()); });
@@ -74,6 +98,15 @@ export function initEditor({ c, commit, toast, pageRatio }: Deps) {
     b.onclick = () => { s.key = a.key; paint(); };
     return b;
   }));
+  const auto = document.createElement('button');
+  auto.className = 'chip'; auto.textContent = 'Auto'; auto.setAttribute('aria-label', 'Auto enhance');
+  auto.onclick = () => {
+    if (!s.img) return;
+    s.work.adj = autoAdjust(statsOf(s.img));
+    paint(); schedule();
+    toast('Auto enhance applied. Tweak any slider, or Revert.');
+  };
+  $('dial').prepend(auto);
   range.oninput = () => {
     const v = Number(range.value);
     if (v) s.work.adj[s.key] = v; else delete s.work.adj[s.key];
@@ -83,6 +116,34 @@ export function initEditor({ c, commit, toast, pageRatio }: Deps) {
   const resetKey = () => { delete s.work.adj[s.key]; paint(); schedule(); };
 
   // --- filters / presets tabs ---
+  let thumbs: Record<string, string> = {};
+  const buildThumbs = () => {
+    thumbs = {};
+    if (!s.img) return;
+    try {
+      const src = smallOf(s.img, 88);
+      const shot = (adj: ReturnType<typeof effective>) => {
+        const f = new fabric.Image(src);
+        f.filters = isNeutral(adj) ? [] : [makeAdjustFilter(adj)];
+        f.applyFilters();
+        const out = Object.assign(document.createElement('canvas'), { width: 88, height: 88 });
+        out.getContext('2d')!.drawImage(f.getElement() as CanvasImageSource, 0, 0, 88, 88);
+        return out.toDataURL('image/jpeg', 0.7);
+      };
+      thumbs.none = shot(effective(undefined, []));
+      BUILTIN.forEach(b => { thumbs[b.id] = shot(effective({ adj: {}, filter: { id: b.id, amount: 100 } }, BUILTIN)); });
+    } catch { thumbs = {}; } // previews are a nicety; fall back to plain chips
+  };
+  const thumbChip = (label: string, id: string, on: boolean, run: () => void) => {
+    if (!thumbs[id]) return chip(label, on, run);
+    const b = document.createElement('button');
+    b.className = 'chip th'; b.setAttribute('aria-pressed', String(on)); b.onclick = run;
+    const im = document.createElement('img');
+    im.src = thumbs[id]; im.alt = '';
+    b.append(im, label);
+    return b;
+  };
+
   const chip = (label: string, on: boolean, run: () => void) => {
     const b = document.createElement('button');
     b.className = 'chip'; b.textContent = label; b.setAttribute('aria-pressed', String(on)); b.onclick = run;
@@ -126,10 +187,12 @@ export function initEditor({ c, commit, toast, pageRatio }: Deps) {
     range.min = s.key === 'noiseReduction' ? '0' : '-100';
     range.value = String(s.work.adj[s.key] ?? 0);
     $('adj-val').textContent = String(s.work.adj[s.key] ?? 0);
-    $('filters').replaceChildren(
-      chip('None', !s.work.filter, () => pick(undefined)),
-      ...BUILTIN.map(f => chip(f.name, s.work.filter?.id === f.id, () => pick(f.id))),
+    const fl = $('filters'), keep = fl.scrollLeft;
+    fl.replaceChildren(
+      thumbChip('None', 'none', !s.work.filter, () => pick(undefined)),
+      ...BUILTIN.map(f => thumbChip(f.name, f.id, s.work.filter?.id === f.id, () => pick(f.id))),
     );
+    fl.scrollLeft = keep;
     $('amount').hidden = tab === 'adjust' || !s.work.filter;
     amount.value = String(s.work.filter?.amount ?? 100);
     $('amt-val').textContent = String(s.work.filter?.amount ?? 100);
@@ -141,6 +204,7 @@ export function initEditor({ c, commit, toast, pageRatio }: Deps) {
   const showTab = async (name: string) => {
     if (tab === 'crop' && name !== 'crop') await leaveCrop();
     tab = name;
+    if (name === 'filters') buildThumbs();
     all('[data-ed-tab]').forEach(t => t.setAttribute('aria-pressed', String(t.dataset.edTab === name)));
     all('[data-ed-panel]').forEach(p => { p.hidden = p.dataset.edPanel !== name; });
     paint();

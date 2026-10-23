@@ -166,6 +166,9 @@
     position: relative; flex: none; min-height: 40px; padding: 8px 14px; border-radius: 999px; cursor: pointer;
     border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 500 14px var(--font-ui);
   }
+  body[data-editing] #zoom { display: none; }
+  .chip.th { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 4px 7px; min-width: 72px; border-radius: 12px; font-size: 12px; }
+  .chip.th img { width: 64px; height: 64px; border-radius: 8px; display: block; }
   .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
   .chip.changed::after { content: ""; position: absolute; top: 5px; right: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
   .chip.changed[aria-pressed="true"]::after { background: var(--accent-ink); }
@@ -210,6 +213,16 @@
           <button class="opt" data-add="rect"><span data-icon="rect"></span>Rectangle</button>
           <button class="opt" data-add="circle"><span data-icon="circle"></span>Circle</button>
           <button class="opt" data-add="triangle"><span data-icon="triangle"></span>Triangle</button>
+        </div>
+      </section>
+
+      <section data-sheet="style" data-title="Style" hidden>
+        <div class="slide"><span class="slide-name">Opacity</span><input id="st-op" type="range" min="0" max="100" value="100" aria-label="Opacity"><output id="st-op-v">100</output></div>
+        <div class="slide" id="st-rad-row"><span class="slide-name">Corners</span><input id="st-rad" type="range" min="0" max="100" value="0" aria-label="Corner roundness"><output id="st-rad-v">0</output></div>
+        <div class="slide"><span class="slide-name">Shadow</span><div id="st-shadow" class="dial"></div></div>
+        <div class="grid3">
+          <button class="opt" data-flip="x">Flip left-right</button>
+          <button class="opt" data-flip="y">Flip up-down</button>
         </div>
       </section>
 
@@ -267,6 +280,7 @@
 
     <div class="grp" data-for="any" hidden>
       <button class="tool" id="b-group" data-act="group" hidden><span data-icon="group"></span>Group</button>
+      <button class="tool" data-act="style"><span data-icon="sliders"></span>Style</button>
       <button class="tool" data-act="align"><span data-icon="alignC"></span>Align</button>
       <button class="tool" id="b-lock" data-act="lock"><span data-icon="lock"></span>Lock</button>
       <button class="tool" data-act="dup"><span data-icon="copy"></span>Duplicate</button>
