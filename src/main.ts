@@ -4,37 +4,129 @@ import { FONTS, loadFont } from './fonts';
 import { ICONS, svg } from './icons';
 import { Design, FabricJSON, fabricToPage, newDesign, pageToFabric } from './model';
 import { SIZES } from './sizes';
+import { deleteDesign, getDesign, lastId, listMeta, migrateOld, putDesign, renameDesign, setLastId } from './store';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const all = <T extends HTMLElement = HTMLElement>(sel: string) => [...document.querySelectorAll<T>(sel)];
 
 const ACCENT = '#0e9488';
 const INK = '#16211f';
-const KEY = 'canva-lite:design';
 const DEFAULT_FONT = FONTS[0];
 
 // Bigger, rounder handles so objects are easy to grab with a finger.
 fabric.Object.prototype.set({
   transparentCorners: false, cornerStyle: 'circle', cornerColor: ACCENT, cornerStrokeColor: '#ffffff',
-  borderColor: ACCENT, cornerSize: 14, borderScaleFactor: 2, padding: 4,
+  borderColor: ACCENT, cornerSize: 12, borderScaleFactor: 1.5, padding: 0, // padding 0: the outline hugs the object exactly
 });
-Object.assign(fabric.Object.prototype, { touchCornerSize: 36 }); // missing from the type defs
+Object.assign(fabric.Object.prototype, { touchCornerSize: 30 }); // missing from the type defs
+// Corners only (no edge handles), and the rotate knob sits closer, so handles get in the way less.
+fabric.Object.prototype.setControlsVisibility({ mt: false, mb: false, ml: false, mr: false });
+fabric.Object.prototype.controls.mtr.offsetY = -22;
 
 const c = new fabric.Canvas('c', { backgroundColor: '#ffffff', preserveObjectStacking: true });
+const raw = c as unknown as { wrapperEl: HTMLElement; contextTop: CanvasRenderingContext2D; _currentTransform: unknown; _groupSelector: unknown }; // not in the type defs
 let logical = { w: 1080, h: 1080 };
 let design: Design = newDesign(logical.w, logical.h);
 let live = false; // true once a design is open; autosave stays off until then so it can't overwrite the saved one
 
 all('[data-icon]').forEach(el => { el.innerHTML = svg(ICONS[el.dataset.icon!]); });
 
-// --- zoom to fit ---------------------------------------------------------
-// The canvas keeps its real pixel size (`logical`) and is zoomed to fit the screen.
+// --- zoom, pan, fit -------------------------------------------------------
+// The canvas keeps its real pixel size (`logical`). `vz` is the zoom on top of "fit to screen" (1 = fit), `vx/vy` the pan.
+// Two fingers pinch and pan; ctrl/cmd + wheel zooms on desktop.
 const stage = $('stage');
+const MAXZ = 4;
+let vz = 1, vx = 0, vy = 0;
+const base = () => Math.min((stage.clientWidth - 24) / logical.w, (stage.clientHeight - 24) / logical.h);
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const clampPan = (z: number, x: number, y: number) => {
+  if (z <= 1.001) return { x: 0, y: 0 };
+  const mx = Math.max(0, (logical.w * base() * z - stage.clientWidth) / 2) + 48;
+  const my = Math.max(0, (logical.h * base() * z - stage.clientHeight) / 2) + 48;
+  return { x: clamp(x, -mx, mx), y: clamp(y, -my, my) };
+};
 const fit = () => {
-  const z = Math.min((stage.clientWidth - 24) / logical.w, (stage.clientHeight - 24) / logical.h);
-  if (z > 0) { c.setZoom(z); c.setDimensions({ width: logical.w * z, height: logical.h * z }); }
+  const b = base();
+  if (!(b > 0)) return;
+  ({ x: vx, y: vy } = clampPan(vz, vx, vy));
+  const z = b * vz;
+  c.setZoom(z); c.setDimensions({ width: logical.w * z, height: logical.h * z });
+  const el = raw.wrapperEl;
+  el.style.position = 'absolute'; el.style.transform = '';
+  el.style.left = `${(stage.clientWidth - logical.w * z) / 2 + vx}px`;
+  el.style.top = `${(stage.clientHeight - logical.h * z) / 2 + vy}px`;
+  c.calcOffset();
+  $('zoom-fit').textContent = vz <= 1.001 ? 'Fit' : `${Math.round(z * 100)}%`;
+  $('zoom-out').toggleAttribute('disabled', vz <= 1.001);
+  $('zoom-in').toggleAttribute('disabled', vz >= MAXZ - 0.001);
+};
+const resetView = () => { vz = 1; vx = 0; vy = 0; fit(); };
+const zoomAt = (z: number, px: number, py: number) => { // keep the point under (px, py) in place
+  z = clamp(z, 1, MAXZ);
+  const k = z / vz, cx = stage.clientWidth / 2, cy = stage.clientHeight / 2;
+  vx = px - (px - cx - vx) * k - cx; vy = py - (py - cy - vy) * k - cy; vz = z;
+  fit();
 };
 new ResizeObserver(fit).observe(stage);
+$('zoom-fit').onclick = resetView;
+const zoomStep = (f: number) => zoomAt(vz * f, stage.clientWidth / 2, stage.clientHeight / 2);
+$('zoom-in').onclick = () => zoomStep(1.5);
+$('zoom-out').onclick = () => zoomStep(1 / 1.5);
+
+stage.addEventListener('wheel', e => {
+  if (document.body.dataset.editing) return;
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  if (e.ctrlKey || e.metaKey) zoomAt(vz * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+  else if (vz > 1.001) { vx -= e.deltaX; vy -= e.deltaY; fit(); }
+}, { passive: false });
+
+// Two-finger pinch. Touches are intercepted before Fabric sees them, and anything the first finger started is undone.
+let pinch: { d0: number; x0: number; y0: number; z0: number; vx0: number; vy0: number; z: number; x: number; y: number } | null = null;
+let swallow = false; // keep ignoring touches until every finger is up
+let grab: { o: fabric.Object; left: number; top: number; sx: number; sy: number; angle: number } | null = null;
+c.on('mouse:down', e => { const o = e.target; grab = o ? { o, left: o.left ?? 0, top: o.top ?? 0, sx: o.scaleX ?? 1, sy: o.scaleY ?? 1, angle: o.angle ?? 0 } : null; });
+const two = (t: TouchList) => {
+  const r = stage.getBoundingClientRect(), a = t[0], b = t[1];
+  return { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1, x: (a.clientX + b.clientX) / 2 - r.left, y: (a.clientY + b.clientY) / 2 - r.top };
+};
+const stop = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+stage.addEventListener('touchstart', e => {
+  if (document.body.dataset.editing) return;
+  if (swallow || pinch) { stop(e); return; }
+  if (e.touches.length !== 2) return;
+  stop(e); swallow = true;
+  if (grab) { grab.o.set({ left: grab.left, top: grab.top, scaleX: grab.sx, scaleY: grab.sy, angle: grab.angle }); grab.o.setCoords(); }
+  raw._currentTransform = null; raw._groupSelector = null; c.clearContext(raw.contextTop); c.requestRenderAll();
+  const p = two(e.touches);
+  pinch = { d0: p.d, x0: p.x, y0: p.y, z0: vz, vx0: vx, vy0: vy, z: vz, x: vx, y: vy };
+}, { capture: true, passive: false });
+stage.addEventListener('touchmove', e => {
+  if (!swallow) return;
+  stop(e);
+  if (!pinch || e.touches.length < 2) return;
+  const p = two(e.touches), cx = stage.clientWidth / 2, cy = stage.clientHeight / 2;
+  const z = clamp(pinch.z0 * (p.d / pinch.d0), 1, MAXZ), k = z / pinch.z0;
+  const pan = clampPan(z, p.x - (pinch.x0 - cx - pinch.vx0) * k - cx, p.y - (pinch.y0 - cy - pinch.vy0) * k - cy);
+  pinch.z = z; pinch.x = pan.x; pinch.y = pan.y;
+  raw.wrapperEl.style.transform = `translate(${pan.x - vx}px, ${pan.y - vy}px) scale(${z / vz})`; // cheap live preview; fit() redraws sharply on release
+}, { capture: true, passive: false });
+const endPinch = (e: TouchEvent) => {
+  if (!swallow) return;
+  stop(e);
+  if (pinch) { vz = pinch.z; vx = pinch.x; vy = pinch.y; pinch = null; fit(); }
+  if (e.touches.length === 0) swallow = false;
+};
+stage.addEventListener('touchend', endPinch, { capture: true, passive: false });
+stage.addEventListener('touchcancel', endPinch, { capture: true, passive: false });
+
+// Handles shrink with small objects so they never swallow what they belong to.
+c.on('before:render', () => {
+  const o = c.getActiveObject();
+  if (!o) return;
+  const s = Math.min(o.getScaledWidth(), o.getScaledHeight()) * c.getZoom();
+  Object.assign(o, { cornerSize: clamp(s * 0.16, 7, 14), touchCornerSize: clamp(s * 0.7, 22, 32) });
+});
 
 // --- fonts ---------------------------------------------------------------
 const fontSel = $<HTMLSelectElement>('font');
@@ -65,15 +157,20 @@ const toast = (msg: string, action?: { label: string; run: () => void }) => {
 };
 
 // --- save / autosave -----------------------------------------------------
-// shortcut: one autosave slot in localStorage (~5MB). Photos are downscaled on import to keep it small; move to IndexedDB or a backend when it bites.
-const readSaved = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
-const save = () => {
+// Designs are saved to IndexedDB (see store.ts). A blank design that was never touched is not saved, so Home stays tidy.
+let stored = false; // true once this design exists in the store
+const thumbOf = () => c.toDataURL({ format: 'jpeg', quality: 0.7, multiplier: 240 / Math.max(c.getWidth(), c.getHeight()) });
+const save = async () => {
   design.pages[0] = fabricToPage(design.pages[0], c.toJSON(['edit', 'orig']) as unknown as FabricJSON, logical.w, logical.h);
-  try { localStorage.setItem(KEY, JSON.stringify(design)); } catch { toast('Could not save: browser storage is full or blocked.'); }
+  if (!stored && !c.getObjects().length) return;
+  try {
+    await putDesign(design, { id: design.id, title: design.title, updated: Date.now(), thumb: thumbOf(), w: logical.w, h: logical.h });
+    stored = true; setLastId(design.id);
+  } catch { toast('Could not save: browser storage is full or blocked.'); }
 };
 let saveTimer = 0;
-const autosave = () => { if (live) { clearTimeout(saveTimer); saveTimer = window.setTimeout(save, 500); } };
-addEventListener('pagehide', () => { if (live) save(); });
+const autosave = () => { if (live) { clearTimeout(saveTimer); saveTimer = window.setTimeout(() => void save(), 500); } };
+addEventListener('pagehide', () => { if (live) void save(); });
 
 // --- history -------------------------------------------------------------
 // shortcut: full-JSON snapshots, fine for small designs. Upgrade to diffs/patches when designs get heavy.
@@ -287,37 +384,74 @@ all('[data-resize]').forEach(b => {
   b.onclick = () => { const s = SIZES[Number(b.dataset.resize)]; logical = { w: s.w, h: s.h }; fit(); autosave(); closeSheet(); };
 });
 
-// --- start screen ---------------------------------------------------------
+// --- home screen and opening designs ----------------------------------------
 const startNew = (w: number, h: number) => {
+  clearTimeout(saveTimer);
   busy = true; c.clear(); busy = false;
   setBg('#ffffff', false);
-  design = newDesign(w, h); logical = { w, h }; hist = []; pos = -1;
-  fit(); snap(); live = true; autosave();
-  $('start').hidden = true; syncUI();
+  design = newDesign(w, h); logical = { w, h }; hist = []; pos = -1; stored = false;
+  vz = 1; vx = 0; vy = 0; fit(); snap(); live = true;
+  $('home').hidden = true; syncUI();
 };
-const continueSaved = () => {
-  if (live) { $('start').hidden = true; return; }
-  const raw = readSaved();
-  if (!raw) return;
+const loadDesign = (d: Design) => {
+  clearTimeout(saveTimer);
   try {
-    design = JSON.parse(raw) as Design;
-    const page = design.pages[0];
+    design = d;
+    const page = d.pages[0];
     logical = { w: page.width, h: page.height };
+    vz = 1; vx = 0; vy = 0;
     busy = true;
     c.loadFromJSON(pageToFabric(page), async () => {
-      busy = false; hist = []; pos = -1;
+      busy = false; hist = []; pos = -1; stored = true;
       fit(); setBg(page.background, false);
       await ensureFonts(page.objects.map(o => o.fontFamily).filter((f): f is string => typeof f === 'string'));
-      snap(); live = true; $('start').hidden = true; syncUI();
+      snap(); live = true; setLastId(d.id); $('home').hidden = true; syncUI();
     });
-  } catch { toast('Your saved design could not be opened.'); startNew(1080, 1080); }
+  } catch { toast('That design could not be opened.'); startNew(1080, 1080); }
 };
-const showStart = () => {
-  const canContinue = live || !!readSaved();
-  $('start-continue').hidden = !canContinue;
-  $('start-continue').textContent = live ? 'Back to my design' : 'Continue my last design';
-  $('start-warn').hidden = !live;
-  $('start').hidden = false;
+const ago = (t: number) => {
+  const m = Math.round((Date.now() - t) / 60000);
+  return m < 1 ? 'Just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+};
+const showHome = async () => {
+  $('home-back').hidden = !live;
+  $('home').hidden = false;
+  if (live) { clearTimeout(saveTimer); await save(); } // so the current design is listed with a fresh preview
+  const rows = await listMeta();
+  $('home-empty').hidden = rows.length > 0;
+  $('home-grid').replaceChildren(...rows.map(m => {
+    const card = document.createElement('div');
+    card.className = 'dcard';
+    const thumb = document.createElement('button');
+    thumb.className = 'thumb'; thumb.setAttribute('aria-label', `Open ${m.title}`);
+    if (m.thumb) { const im = document.createElement('img'); im.src = m.thumb; im.alt = ''; thumb.append(im); }
+    thumb.onclick = async () => {
+      if (live && m.id === design.id) { $('home').hidden = true; return; }
+      const d = await getDesign(m.id);
+      if (d) loadDesign(d); else toast('That design is missing.');
+    };
+    const name = document.createElement('input');
+    name.value = m.title; name.setAttribute('aria-label', 'Design name');
+    name.onchange = async () => {
+      const title = name.value.trim() || 'Untitled';
+      name.value = title;
+      if (m.id === design.id) design.title = title;
+      await renameDesign(m.id, title);
+    };
+    const row = document.createElement('div');
+    row.className = 'meta';
+    const del = document.createElement('button');
+    del.textContent = 'Delete';
+    del.onclick = async () => {
+      if (del.textContent === 'Delete') { del.textContent = 'Sure?'; setTimeout(() => { del.textContent = 'Delete'; }, 3000); return; }
+      await deleteDesign(m.id);
+      if (live && m.id === design.id) startNew(1080, 1080); // the open design was deleted: leave a fresh blank one behind
+      void showHome();
+    };
+    row.append(`${ago(m.updated)} · ${m.w}×${m.h}`, del);
+    card.append(thumb, name, row);
+    return card;
+  }));
 };
 all('[data-new]').forEach(b => { b.onclick = () => { const s = SIZES[Number(b.dataset.new)]; startNew(s.w, s.h); }; });
 
@@ -341,11 +475,11 @@ const images = () => c.getActiveObjects().filter((o): o is PhotoImage => o.type 
 c.on('mouse:dblclick', e => { if (e.target?.type === 'image') editor.open(e.target as PhotoImage); });
 
 const actions: Record<string, () => void> = {
-  undo, redo, del, dup, export: exportPNG, new: showStart, closeSheet,
+  undo, redo, del, dup, export: exportPNG, home: () => void showHome(), closeSheet,
   edit: () => { const [img] = images(); if (img) editor.open(img); },
   copyEdits: () => { const [img] = images(); if (img) editor.copyEdits(img); },
   pasteEdits: () => editor.pasteEdits(images()),
-  continue: continueSaved,
+  continue: () => { $('home').hidden = true; },
   closeExport: () => { $('export').hidden = true; },
   forward: () => order(1), backward: () => order(-1),
   bold: () => toggle('fontWeight', 'bold'),
@@ -377,5 +511,11 @@ addEventListener('keydown', e => {
 
 ensureFonts([DEFAULT_FONT]);
 syncUI();
-// Open straight into the last design, or a blank square page. The size picker is behind "New".
-if (readSaved()) continueSaved(); else startNew(1080, 1080);
+// Open straight into the last design, or a blank square page. Home (and the size picker) is one tap away.
+void (async () => {
+  await migrateOld('');
+  const id = lastId();
+  let d = id ? await getDesign(id) : undefined;
+  if (!d) { const m = (await listMeta())[0]; if (m) d = await getDesign(m.id); }
+  if (d) loadDesign(d); else startNew(1080, 1080);
+})();

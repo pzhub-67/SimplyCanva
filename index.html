@@ -118,6 +118,28 @@
   }
   .toast button { border: 0; background: none; color: inherit; font: 700 14px var(--font-ui); text-decoration: underline; cursor: pointer; padding: 4px; }
 
+
+  #stage, #stage .canvas-container, #stage canvas { touch-action: none; }
+  .canvas-container { position: absolute; }
+  #zoom { position: absolute; right: 10px; top: 10px; z-index: 3; display: flex; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); overflow: hidden; }
+  #zoom button { min-width: 44px; min-height: 40px; border: 0; background: none; color: var(--ink); font: 600 15px var(--font-ui); cursor: pointer; }
+  #zoom button:disabled { opacity: .35; }
+  #zoom #zoom-fit { min-width: 56px; font-size: 13px; border-inline: 1px solid var(--line); }
+  .overlay.home { place-items: start center; overflow: auto; background: var(--bg); }
+  .home-in { width: min(100%, 720px); display: flex; flex-direction: column; gap: 12px; padding-bottom: 24px; }
+  .home-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .home-head h1 { margin: 0; font: 700 28px var(--font-brand); letter-spacing: -0.02em; }
+  .home h2 { margin: 8px 0 0; font: 700 15px var(--font-ui); color: var(--muted); }
+  .home #start-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .dcard { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+  .dcard .thumb { aspect-ratio: 1; display: grid; place-items: center; border: 0; border-radius: 8px; background: var(--stage); cursor: pointer; padding: 0; overflow: hidden; }
+  .dcard .thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .dcard input { min-width: 0; min-height: 36px; padding: 4px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--ink); font: 600 15px var(--font-ui); }
+  .dcard input:focus { border-color: var(--line); background: var(--bg); }
+  .dcard .meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; color: var(--muted); font-size: 12px; padding: 0 4px; }
+  .dcard .meta button { border: 0; background: none; color: var(--muted); font: 600 12px var(--font-ui); text-decoration: underline; min-height: 36px; padding: 0 6px; cursor: pointer; }
+
   .overlay {
     position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgb(10 20 18 / .6);
     padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
@@ -163,13 +185,14 @@
 <body>
   <header id="top" class="bar">
     <span class="brand">Canva Lite</span>
-    <button class="tool" data-act="new" aria-label="New design"><span data-icon="plus"></span>New</button>
+    <button class="tool" data-act="home" aria-label="Home: my designs and new design"><span data-icon="home"></span>Home</button>
     <button class="tool" id="undo" data-act="undo" aria-label="Undo" disabled><span data-icon="undo"></span></button>
     <button class="tool" id="redo" data-act="redo" aria-label="Redo" disabled><span data-icon="redo"></span></button>
     <button class="btn" data-act="export">Export</button>
   </header>
 
   <main id="stage">
+    <div id="zoom"><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-fit" aria-label="Zoom to fit">Fit</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
     <canvas id="c"></canvas>
     <div id="crop" hidden><canvas id="crop-cv" aria-label="Crop frame. Drag the corners or the middle."></canvas></div>
     <div id="toast" class="toast" role="status" hidden></div>
@@ -298,12 +321,17 @@
   </section>
   <input id="img" type="file" accept="image/*" multiple hidden>
 
-  <div id="start" class="overlay" hidden>
-    <div class="dialog" role="dialog" aria-labelledby="start-h">
-      <h1 id="start-h">What are you making?</h1>
+  <div id="home" class="overlay home" hidden>
+    <div class="home-in">
+      <div class="home-head">
+        <h1>Canva Lite</h1>
+        <button id="home-back" class="btn" data-act="continue" hidden>Back to editor</button>
+      </div>
+      <h2>New design</h2>
       <div id="start-list" class="list"></div>
-      <p id="start-warn" hidden>Starting a new design replaces the one you are working on.</p>
-      <button id="start-continue" class="btn quiet" data-act="continue" hidden></button>
+      <h2>Your designs</h2>
+      <div id="home-grid" class="dgrid"></div>
+      <p id="home-empty" class="muted" hidden>Nothing saved yet. Designs you make appear here automatically.</p>
     </div>
   </div>
 

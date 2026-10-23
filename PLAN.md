@@ -9,7 +9,9 @@ Built against `canva-feature-reference.md`.
 4. **Open straight into the editor.** Never force picking a size or template on open; a blank 1080x1080 canvas is ready, and size is changeable later.
 5. **iPhone-style photo editing:** sliders, temporary preview until Done, hold to compare, revert, plus crop, rotate, flip and straighten.
 6. **Lightroom-style customizable presets:** save, name, apply with Amount, copy/paste settings across photos.
-7. **Collaboration is deprioritized** (Later / optional).
+7. **Zoom and comfortable handles.** Pinch/button zoom and pan are required, and selection handles must stay small, corners only, and shrink with small objects; the outline must hug the object exactly.
+8. **Home screen is opt-in.** A Home button shows saved designs and new-design sizes; it never blocks opening the editor.
+9. **Collaboration is deprioritized** (Later / optional).
 
 Process rule: any new focus the owner states in chat is added to this list in the same session.
 
@@ -72,7 +74,7 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 **Status**
 - Done: edit mode with all 15 sliders (one WebGL filter, params stored on the image), temporary preview with Done/Cancel, hold to compare, Revert, 10 built-in looks with Amount, saved presets (save, rename, delete, apply), copy/paste edits across selected photos, undo/redo and autosave of edits
 - Done: Crop tab with ratio chips (Free, Original, Page, 1:1, 4:5, 3:4, 16:9, 9:16), draggable frame with corner resize, rotate 90, flip H/V, straighten -45 to +45 (frame stays inside the photo), Reset; crop is re-editable because the original is kept, and it works with Cancel, Revert and undo/redo
-- Next: filter thumbnails from the user's own photo, auto-enhance, before/after split, per-photo edit history list, preset import/export (copy/paste text, since downloads are blocked in the viewer), CPU fallback when WebGL is missing
+- Done (Phase 1 additions): Home screen with saved designs (thumbnails, rename, delete) on IndexedDB; two-finger pinch/pan, zoom buttons, Fit; corner-only handles that scale with the object from the user's own photo, auto-enhance, before/after split, per-photo edit history list, preset import/export (copy/paste text, since downloads are blocked in the viewer), CPU fallback when WebGL is missing
 
 **Editing (iPhone-style)**
 - Double-click an image, or tap **Edit** in its toolbar, to enter edit mode. One panel, three tabs: **Adjust**, **Filters**, **Crop**.
@@ -140,4 +142,4 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 5. **AI:** optional and off by default, so the core stays free of API costs.
 
 ## Next step
-Phase 1 and most of Phase 2 are built. Next: pinch zoom and pan on the canvas, snapping guides, group/lock, then filter thumbnails and auto-enhance.
+Phase 1 and most of Phase 2 are built. Next: snapping guides, group/lock, then filter thumbnails and auto-enhance.

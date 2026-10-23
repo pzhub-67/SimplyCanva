@@ -2,6 +2,7 @@
 export const ICONS: Record<string, string> = {
   undo: '<path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/>',
   redo: '<path d="m15 14 5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/>',
+  home: '<path d="M3 11 12 4l9 7M5 10v10h14V10"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   export: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
   text: '<path d="M5 7V4h14v3M12 4v16M9 20h6"/>',
