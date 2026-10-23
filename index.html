@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Canva Lite</title>
+</head>
+<body>
+  <div id="bar">
+    <button data-act="undo">Undo</button>
+    <button data-act="redo">Redo</button>
+    <select id="size">
+      <option value="900x560">Default 900×560</option>
+      <option value="960x540">Slide 960×540</option>
+      <option value="1080x1080">Instagram 1080×1080</option>
+      <option value="1080x1920">Story 1080×1920</option>
+      <option value="794x1123">A4 794×1123</option>
+    </select>
+    <button data-act="text">Text</button>
+    <button data-act="rect">Rect</button>
+    <button data-act="circle">Circle</button>
+    <button data-act="image">Image</button>
+    <input id="img" type="file" accept="image/*" hidden>
+    <input id="color" type="color" value="#7c3aed" title="Fill color">
+    <input id="bg" type="color" value="#ffffff" title="Background">
+    <button data-act="front">Bring forward</button>
+    <button data-act="back">Send back</button>
+    <button data-act="del">Delete</button>
+    <button data-act="save">Save</button>
+    <button data-act="load">Load</button>
+    <button data-act="png">Export PNG</button>
+  </div>
+  <div id="textbar" hidden>
+    <select id="font"></select>
+    <input id="fsize" type="number" min="6" max="400" title="Font size">
+    <button data-act="bold"><b>B</b></button>
+    <button data-act="italic"><i>I</i></button>
+    <button data-act="underline"><u>U</u></button>
+    <button data-act="left">Left</button>
+    <button data-act="center">Center</button>
+    <button data-act="right">Right</button>
+  </div>
+  <div id="wrap"><canvas id="c" width="900" height="560"></canvas></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

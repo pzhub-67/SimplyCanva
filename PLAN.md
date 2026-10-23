@@ -32,11 +32,11 @@ Fabric `toJSON` maps onto `Object`. Multi-page, templates, resize and collaborat
 
 ## Phase 1: Editor core (M1, M4 basics) — ship a usable editor
 - Done: add text/shapes/images, layers order, undo/redo, size presets, PNG export, local save
-- Next: font picker (Google Fonts) and text styling, alignment, group/ungroup, lock, duplicate
+- Done: Vite + TypeScript, `Design`/`Page` data model (`src/model.ts`), font picker (Google Fonts), size, bold/italic/underline, alignment
+- Next: group/ungroup, lock, duplicate
 - Next: snapping and alignment guides, rulers, zoom/pan
 - Next: multi-page (page strip), per-object opacity, flip, corner radius, shadows, gradients
 - Next: export JPG, SVG, PDF
-- Move to Vite + TypeScript with the data model above; keep Fabric.js
 
 ## Phase 2: Templates and brand (M2)
 - Template gallery: search, categories, tags, thumbnails (saved design JSON)
@@ -89,4 +89,4 @@ Fabric `toJSON` maps onto `Object`. Multi-page, templates, resize and collaborat
 4. **AI:** optional and off by default, so the core stays free of API costs.
 
 ## Next step
-Phase 1: move to Vite + TypeScript with the data model above, then fonts and text styling.
+Rest of Phase 1: group/lock/duplicate, snapping guides and zoom, then JPG/SVG/PDF export.
