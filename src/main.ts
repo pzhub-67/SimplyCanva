@@ -24,7 +24,10 @@ fabric.Object.prototype.setControlsVisibility({ mt: false, mb: false, ml: false,
 fabric.Object.prototype.controls.mtr.offsetY = -22;
 
 const c = new fabric.Canvas('c', { backgroundColor: '#ffffff', preserveObjectStacking: true });
-const raw = c as unknown as { wrapperEl: HTMLElement; contextTop: CanvasRenderingContext2D; _currentTransform: unknown; _groupSelector: unknown }; // not in the type defs
+const raw = c as unknown as {
+  wrapperEl: HTMLElement; contextTop: CanvasRenderingContext2D; _currentTransform: unknown; _groupSelector: unknown;
+  _renderBackground: (ctx: CanvasRenderingContext2D) => void; drawControls: (ctx: CanvasRenderingContext2D) => void;
+}; // not in the type defs
 let logical = { w: 1080, h: 1080 };
 let design: Design = newDesign(logical.w, logical.h);
 let live = false; // true once a design is open; autosave stays off until then so it can't overwrite the saved one
@@ -35,34 +38,34 @@ all('[data-icon]').forEach(el => { el.innerHTML = svg(ICONS[el.dataset.icon!]); 
 // The canvas keeps its real pixel size (`logical`). `vz` is the zoom on top of "fit to screen" (1 = fit), `vx/vy` the pan.
 // Two fingers pinch and pan; ctrl/cmd + wheel zooms on desktop.
 const stage = $('stage');
-const MAXZ = 4;
+const MAXZ = 4, MINZ = 0.4;
 let vz = 1, vx = 0, vy = 0;
 const base = () => Math.min((stage.clientWidth - 24) / logical.w, (stage.clientHeight - 24) / logical.h);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-const clampPan = (z: number, x: number, y: number) => {
-  if (z <= 1.001) return { x: 0, y: 0 };
+const clampPan = (z: number, x: number, y: number) => { // keep part of the page on screen
   const mx = Math.max(0, (logical.w * base() * z - stage.clientWidth) / 2) + 48;
   const my = Math.max(0, (logical.h * base() * z - stage.clientHeight) / 2) + 48;
   return { x: clamp(x, -mx, mx), y: clamp(y, -my, my) };
 };
+// The canvas fills the whole stage and the page is drawn inside it, so objects (and their handles) can leave the page.
 const fit = () => {
   const b = base();
   if (!(b > 0)) return;
   ({ x: vx, y: vy } = clampPan(vz, vx, vy));
-  const z = b * vz;
-  c.setZoom(z); c.setDimensions({ width: logical.w * z, height: logical.h * z });
-  const el = raw.wrapperEl;
-  el.style.position = 'absolute'; el.style.transform = '';
-  el.style.left = `${(stage.clientWidth - logical.w * z) / 2 + vx}px`;
-  el.style.top = `${(stage.clientHeight - logical.h * z) / 2 + vy}px`;
+  const z = b * vz, W = stage.clientWidth, H = stage.clientHeight;
+  c.setDimensions({ width: W, height: H });
+  c.setViewportTransform([z, 0, 0, z, (W - logical.w * z) / 2 + vx, (H - logical.h * z) / 2 + vy]);
+  raw.wrapperEl.style.cssText += ';position:absolute;left:0;top:0;transform:none';
   c.calcOffset();
-  $('zoom-fit').textContent = vz <= 1.001 ? 'Fit' : `${Math.round(z * 100)}%`;
-  $('zoom-out').toggleAttribute('disabled', vz <= 1.001);
+  const home = Math.abs(vz - 1) < 0.001 && Math.abs(vx) < 1 && Math.abs(vy) < 1;
+  $('zoom-fit').textContent = home ? 'Fit' : `${Math.round(z * 100)}%`;
+  $('zoom-out').toggleAttribute('disabled', vz <= MINZ + 0.001);
   $('zoom-in').toggleAttribute('disabled', vz >= MAXZ - 0.001);
+  c.requestRenderAll();
 };
 const resetView = () => { vz = 1; vx = 0; vy = 0; fit(); };
 const zoomAt = (z: number, px: number, py: number) => { // keep the point under (px, py) in place
-  z = clamp(z, 1, MAXZ);
+  z = clamp(z, MINZ, MAXZ);
   const k = z / vz, cx = stage.clientWidth / 2, cy = stage.clientHeight / 2;
   vx = px - (px - cx - vx) * k - cx; vy = py - (py - cy - vy) * k - cy; vz = z;
   fit();
@@ -106,10 +109,11 @@ stage.addEventListener('touchmove', e => {
   stop(e);
   if (!pinch || e.touches.length < 2) return;
   const p = two(e.touches), cx = stage.clientWidth / 2, cy = stage.clientHeight / 2;
-  const z = clamp(pinch.z0 * (p.d / pinch.d0), 1, MAXZ), k = z / pinch.z0;
+  const z = clamp(pinch.z0 * (p.d / pinch.d0), MINZ, MAXZ), k = z / pinch.z0;
   const pan = clampPan(z, p.x - (pinch.x0 - cx - pinch.vx0) * k - cx, p.y - (pinch.y0 - cy - pinch.vy0) * k - cy);
   pinch.z = z; pinch.x = pan.x; pinch.y = pan.y;
-  raw.wrapperEl.style.transform = `translate(${pan.x - vx}px, ${pan.y - vy}px) scale(${z / vz})`; // cheap live preview; fit() redraws sharply on release
+  const s = z / vz;
+  raw.wrapperEl.style.transform = `translate(${pan.x - vx * s}px, ${pan.y - vy * s}px) scale(${s})`; // cheap live preview; fit() redraws sharply on release
 }, { capture: true, passive: false });
 const endPinch = (e: TouchEvent) => {
   if (!swallow) return;
@@ -119,6 +123,81 @@ const endPinch = (e: TouchEvent) => {
 };
 stage.addEventListener('touchend', endPinch, { capture: true, passive: false });
 stage.addEventListener('touchcancel', endPinch, { capture: true, passive: false });
+
+// --- drawing the page ------------------------------------------------------
+// Fabric would paint the background over the whole canvas, so draw the page ourselves. Anything outside the page is faded
+// (except the selected object, shown in full) and never reaches the exported image.
+let exporting = false;
+const pageBg = () => String(c.backgroundColor || '#ffffff');
+raw._renderBackground = ctx => {
+  if (exporting) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = pageBg(); ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); ctx.restore(); return; }
+  const v = c.viewportTransform!, z = v[0];
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.28)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 2;
+  ctx.fillStyle = pageBg(); ctx.fillRect(v[4], v[5], logical.w * z, logical.h * z);
+  ctx.restore();
+};
+const drawControlsOrig = raw.drawControls.bind(c);
+raw.drawControls = ctx => {
+  if (exporting) return;
+  const v = c.viewportTransform!, z = v[0];
+  const outside = () => { ctx.beginPath(); ctx.rect(0, 0, c.getWidth(), c.getHeight()); ctx.rect(v[4], v[5], logical.w * z, logical.h * z); };
+  ctx.save();
+  ctx.globalAlpha = 0.6; ctx.fillStyle = getComputedStyle(stage).backgroundColor;
+  outside(); ctx.fill('evenodd');
+  ctx.restore();
+  const a = c.getActiveObject();
+  if (a) { // selected object stays fully visible, even outside the page
+    ctx.save(); outside(); ctx.clip('evenodd');
+    ctx.transform(v[0], v[1], v[2], v[3], v[4], v[5]);
+    a.render(ctx);
+    ctx.restore();
+  }
+  if (guides.length) {
+    ctx.save(); ctx.strokeStyle = '#ff3d81'; ctx.lineWidth = 1; ctx.beginPath();
+    for (const g of guides) {
+      if (g.x !== undefined) { const x = v[4] + g.x * z; ctx.moveTo(x, 0); ctx.lineTo(x, c.getHeight()); }
+      if (g.y !== undefined) { const y = v[5] + g.y * z; ctx.moveTo(0, y); ctx.lineTo(c.getWidth(), y); }
+    }
+    ctx.stroke(); ctx.restore();
+  }
+  drawControlsOrig(ctx);
+};
+// --- snapping guides ---------------------------------------------------------
+// While moving, edges and centers snap to the page and to other objects (8 screen px), with guide lines shown.
+let guides: { x?: number; y?: number }[] = [];
+c.on('object:moving', e => {
+  const o = e.target;
+  if (!o) return;
+  const thr = 8 / c.getZoom(), skip = new Set<fabric.Object>(o.type === 'activeSelection' ? (o as fabric.ActiveSelection).getObjects() : [o]);
+  const xs = [0, logical.w / 2, logical.w], ys = [0, logical.h / 2, logical.h];
+  c.getObjects().forEach(q => {
+    if (skip.has(q) || !q.visible) return;
+    const r = q.getBoundingRect(true, true);
+    xs.push(r.left, r.left + r.width / 2, r.left + r.width); ys.push(r.top, r.top + r.height / 2, r.top + r.height);
+  });
+  const r = o.getBoundingRect(true, true);
+  const best = (mine: number[], targets: number[]) => {
+    let pick: { d: number; at: number } | null = null;
+    for (const m of mine) for (const g of targets) { const d = g - m; if (Math.abs(d) <= thr && (!pick || Math.abs(d) < Math.abs(pick.d))) pick = { d, at: g }; }
+    return pick;
+  };
+  const bx = best([r.left, r.left + r.width / 2, r.left + r.width], xs);
+  const by = best([r.top, r.top + r.height / 2, r.top + r.height], ys);
+  if (bx) o.set('left', (o.left ?? 0) + bx.d);
+  if (by) o.set('top', (o.top ?? 0) + by.d);
+  guides = [...(bx ? [{ x: bx.at }] : []), ...(by ? [{ y: by.at }] : [])];
+});
+const clearGuides = () => { if (guides.length) { guides = []; c.requestRenderAll(); } };
+c.on('mouse:up', clearGuides);
+
+// The page alone as an image, at the given width.
+const pageImage = (format: 'png' | 'jpeg', outW: number, quality = 0.8) => {
+  const v = c.viewportTransform!, z = v[0];
+  exporting = true;
+  try { return c.toDataURL({ format, quality, left: v[4], top: v[5], width: logical.w * z, height: logical.h * z, multiplier: outW / (logical.w * z) }); }
+  finally { exporting = false; }
+};
 
 // Handles shrink with small objects so they never swallow what they belong to.
 c.on('before:render', () => {
@@ -159,7 +238,7 @@ const toast = (msg: string, action?: { label: string; run: () => void }) => {
 // --- save / autosave -----------------------------------------------------
 // Designs are saved to IndexedDB (see store.ts). A blank design that was never touched is not saved, so Home stays tidy.
 let stored = false; // true once this design exists in the store
-const thumbOf = () => c.toDataURL({ format: 'jpeg', quality: 0.7, multiplier: 240 / Math.max(c.getWidth(), c.getHeight()) });
+const thumbOf = () => pageImage('jpeg', Math.round((logical.w * 240) / Math.max(logical.w, logical.h)), 0.7);
 const save = async () => {
   design.pages[0] = fabricToPage(design.pages[0], c.toJSON(['edit', 'orig']) as unknown as FabricJSON, logical.w, logical.h);
   if (!stored && !c.getObjects().length) return;
@@ -221,7 +300,7 @@ c.on('mouse:down', closeSheet);
 // --- adding things -------------------------------------------------------
 // Centered before the history snapshot, so undo/redo of an add keeps the position.
 const place = (o: fabric.Object) => {
-  batch(() => { c.add(o); c.viewportCenterObject(o); o.setCoords(); });
+  batch(() => { c.add(o); o.setPositionByOrigin(new fabric.Point(logical.w / 2, logical.h / 2), 'center', 'center'); o.setCoords(); });
   c.setActiveObject(o); c.requestRenderAll(); closeSheet();
 };
 
@@ -458,10 +537,7 @@ all('[data-new]').forEach(b => { b.onclick = () => { const s = SIZES[Number(b.da
 // --- export ----------------------------------------------------------------
 // Downloads can be blocked in embedded viewers, so show the image too: press and hold saves it on a phone.
 const exportPNG = () => {
-  c.discardActiveObject();
-  c.setZoom(1); c.setDimensions({ width: logical.w, height: logical.h });
-  const url = c.toDataURL({ format: 'png' });
-  fit();
+  const url = pageImage('png', logical.w);
   $<HTMLImageElement>('export-img').src = url;
   const dl = $<HTMLAnchorElement>('export-dl');
   dl.href = url;

@@ -10,8 +10,9 @@ Built against `canva-feature-reference.md`.
 5. **iPhone-style photo editing:** sliders, temporary preview until Done, hold to compare, revert, plus crop, rotate, flip and straighten.
 6. **Lightroom-style customizable presets:** save, name, apply with Amount, copy/paste settings across photos.
 7. **Zoom and comfortable handles.** Pinch/button zoom and pan are required, and selection handles must stay small, corners only, and shrink with small objects; the outline must hug the object exactly.
-8. **Home screen is opt-in.** A Home button shows saved designs and new-design sizes; it never blocks opening the editor.
-9. **Collaboration is deprioritized** (Later / optional).
+8. **Objects can go beyond the page.** Outside the page they show faded, show in full with handles while selected, and are not in the exported image.
+9. **Home screen is opt-in.** A Home button shows saved designs and new-design sizes; it never blocks opening the editor.
+10. **Collaboration is deprioritized** (Later / optional).
 
 Process rule: any new focus the owner states in chat is added to this list in the same session.
 
@@ -64,7 +65,7 @@ BrandKit { id, logos[], colors[], fonts[] }
 - Done: add text/shapes/images, layer order, undo/redo, size presets, PNG export, local save
 - Done: Vite + TypeScript, `Design`/`Page` model (`src/model.ts`), font picker, size, bold/italic/underline, alignment
 - Done: mobile-first shell (top bar, bottom tabs and sheets, contextual toolbar, start screen), autosave, zoom to fit, drag-drop and paste images, photo downscale on import, duplicate, keyboard shortcuts, light/dark theme
-- Next: pinch zoom and pan, snapping and alignment guides, group/ungroup, lock
+- Next: group/ungroup, lock, alignment buttons
 - Next: multi-page (page strip), opacity, flip, corner radius, shadows, gradients
 - Next: export JPG, SVG, PDF
 
@@ -142,4 +143,4 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 5. **AI:** optional and off by default, so the core stays free of API costs.
 
 ## Next step
-Phase 1 and most of Phase 2 are built. Next: snapping guides, group/lock, then filter thumbnails and auto-enhance.
+Phase 1 and most of Phase 2 are built. Next: group/ungroup and lock, then filter thumbnails and auto-enhance.
