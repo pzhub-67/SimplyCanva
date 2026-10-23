@@ -7,6 +7,7 @@ import { SHAPES } from './shapes';
 import { SIZES } from './sizes';
 import { MIN_PASS, addProfile, current, deleteProfile, lockNow, needsUnlock, noteFail, profiles, renameProfile, switchTo, tryUnlock, waitMs } from './accounts';
 import { changePasscode } from './protect';
+import { loadUiFont } from './uifont';
 import { canCrypto } from './vault';
 import { addBrand, initBrand, loadBrand, removeBrand } from './brand';
 import { dataUrlBytes, makePdf } from './pdf';
@@ -50,7 +51,8 @@ all('[data-icon]').forEach(el => { el.innerHTML = svg(ICONS[el.dataset.icon!]); 
 const stage = $('stage');
 const MAXZ = 4, MINZ = 0.4;
 let vz = 1, vx = 0, vy = 0;
-const base = () => Math.min((stage.clientWidth - 24) / logical.w, (stage.clientHeight - 24) / logical.h);
+// Fit leaves 20px at the sides and clears the page counter and zoom controls (60px) above and below, so the page is centred.
+const base = () => Math.min((stage.clientWidth - 40) / logical.w, (stage.clientHeight - 120) / logical.h);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const clampPan = (z: number, x: number, y: number) => { // keep part of the page on screen
   const mx = Math.max(0, (logical.w * base() * z - stage.clientWidth) / 2) + 48;
@@ -157,8 +159,9 @@ raw._renderBackground = ctx => {
   if (exporting) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = pageBg(); ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); ctx.restore(); return; }
   const v = c.viewportTransform!, z = v[0];
   ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,.28)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 2;
+  ctx.shadowColor = 'rgba(0,0,0,.07)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 1; // the page sits flat in the well: a hairline and a faint lift
   ctx.fillStyle = pageBg(); ctx.fillRect(v[4], v[5], logical.w * z, logical.h * z);
+  ctx.shadowColor = 'transparent'; ctx.strokeStyle = 'rgba(0,0,0,.08)'; ctx.lineWidth = 1; ctx.strokeRect(v[4] - .5, v[5] - .5, logical.w * z + 1, logical.h * z + 1);
   ctx.restore();
 };
 const drawControlsOrig = raw.drawControls.bind(c);
@@ -642,7 +645,7 @@ const loadDesign = (d: Design) => {
 };
 
 // --- pages -------------------------------------------------------------------------
-const updatePager = () => { $('pager').textContent = `Page ${pageIdx + 1} of ${design.pages.length}`; };
+const updatePager = () => { $('pager').textContent = `Page ${pageIdx + 1} of ${design.pages.length}`; $('doc-title').textContent = design.title || 'Untitled design'; document.title = `${design.title || 'Untitled design'} · SimplyCanva`; };
 const leavePage = () => { clearTimeout(saveTimer); commitPage(); design.pages[pageIdx].thumb = thumbOf(); };
 const gotoPage = (i: number) => {
   if (i === pageIdx || !design.pages[i]) return;
@@ -742,6 +745,7 @@ const renderBrand = () => {
   $('st-brand').replaceChildren(...colors.map(h => swatch(h, () => { styled(o => { if (o.type !== 'image') o.set('fill', h); }, true); syncUI(); }, `Fill ${h}`)));
   $('bg-brand-row').hidden = $('st-brand-row').hidden = colors.length === 0;
 };
+$<HTMLInputElement>('brand-color').oninput = e => $('brand-swatch').style.setProperty('--sw', (e.target as HTMLInputElement).value);
 $('brand-add').onclick = () => { addBrand($<HTMLInputElement>('brand-color').value); renderBrand(); };
 
 // --- local profiles ----------------------------------------------------------------
@@ -850,7 +854,7 @@ const showHome = async () => {
     name.onchange = async () => {
       const title = name.value.trim() || 'Untitled';
       name.value = title;
-      if (m.id === design.id) design.title = title;
+      if (m.id === design.id) { design.title = title; updatePager(); }
       await renameDesign(m.id, title);
     };
     const row = document.createElement('div');
@@ -863,7 +867,7 @@ const showHome = async () => {
       if (live && m.id === design.id) startNew(1080, 1080); // the open design was deleted: leave a fresh blank one behind
       void showHome();
     };
-    row.append(`${ago(m.updated)} · ${m.w}×${m.h}`, del);
+    row.append(Object.assign(document.createElement('span'), { textContent: `${ago(m.updated)} · ${m.w}×${m.h}`, style: 'overflow:hidden;text-overflow:ellipsis' }), del);
     card.append(thumb, name, row);
     return card;
   }));
@@ -969,6 +973,7 @@ addEventListener('keydown', e => {
   else if (mod && k === 'd') { e.preventDefault(); dup(); }
 });
 
+loadUiFont();
 ensureFonts([DEFAULT_FONT]);
 syncUI();
 // Protected profiles lock themselves after 5 minutes in a hidden tab.

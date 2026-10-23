@@ -1,6 +1,6 @@
 # SimplyCanva
 
-An open-source, mobile-first design editor that runs in the browser (a "Canva Lite").
+An open-source, mobile-first design editor that runs in the browser (a "SimplyCanva").
 Vite + TypeScript + Fabric.js. No backend: designs are saved in your browser (IndexedDB).
 
 - Photo editing close to iPhone Photos (sliders, preview until Done, hold to compare, crop and straighten) with Lightroom-style presets.

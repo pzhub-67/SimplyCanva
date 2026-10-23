@@ -39,7 +39,7 @@ with sync_playwright() as p:
         pg.screenshot(path='/tmp/claude-0/ac3.png'); print('lock err', pg.is_visible('#lock-err'), pg.inner_text('#lock-err'))
     pg.click('[data-act="home"]'); pg.click('#acct-btn')
     pg.set_input_files('#acct-restore', files=['/tmp/claude-0/backup.json']); pg.wait_for_timeout(2500)
-    print('Work after restore', cards())
+    print('restore returns to Home', pg.is_visible('#home'), 'Work after restore', pg.locator('.dcard').count())
     # delete Work
     pg.click('#acct-btn'); pg.click('#acct-del'); pg.click('#acct-del'); pg.wait_for_timeout(2500)
     pg.click('[data-act="home"]'); pg.click('#acct-btn'); print('profiles left', pg.locator('#acct-list .opt').count(), pg.inner_text('#acct-btn'))

@@ -15,19 +15,23 @@ Built against `canva-feature-reference.md`.
 10. **No asset library, only basic shapes.** No stock photos, icon packs or stickers.
 11. **Local accounts only.** Profiles live on the device; no Google or third-party sign-in, no cloud.
 12. **Collaboration is deprioritized** (Later / optional).
+13. **Everything must be secure.** Profile data is encrypted at rest under the passcode; nothing loads from third-party servers; imported files are validated.
+14. **UI overhaul (Oct 2026):** quiet "framed sheet" interface: green-grey frame, the design in a well, near-black primary, brand teal only on the logo, selection and the active tab. Keep it that way; colour belongs to the user's design.
+15. **Cross-device sync, if built:** end-to-end encrypted blobs through a small server the owner controls (Cloudflare Worker + R2, or Docker), newest-wins with the older copy kept; no Google. Not started.
 
 Process rule: any new focus the owner states in chat is added to this list in the same session.
 
 ## Handoff notes (read this first when resuming)
 
-**What exists.** "Canva Lite": a mobile-first browser design editor. Vite 5 + TypeScript (strict) + Fabric.js 5.3, tests with vitest, end-to-end smoke tests with Playwright (python). Repo root `canva-lite/`, branch `main`, small commits with `Co-Authored-By` and `Claude-Session` trailers.
+**What exists.** "SimplyCanva" (formerly "Canva Lite"): a mobile-first browser design editor. Vite 5 + TypeScript (strict) + Fabric.js 5.3, tests with vitest, end-to-end smoke tests with Playwright (python). Repo root `canva-lite/`, branch `main`, small commits with `Co-Authored-By` and `Claude-Session` trailers.
 
 **Repo:** https://github.com/pzhub-67/SimplyCanva (public, branch `main`). Rule from the owner: commit and `git push origin HEAD:main` after every step. Push from `canva-lite/` (remote `origin`); GitHub redirects the lower-case name.
 
 **Commands**
-- `npm run dev` dev server, `npm test` unit tests (12), `npm run build` typecheck + bundle.
+- `npm run dev` dev server, `npm test` unit tests (14), `npm run build` typecheck + bundle.
 - `npm run artifact` builds `dist/artifact.html`, a single self-contained page. Publish it with the Artifact tool using that same file path (keeps the same link). The owner opens that link on a phone.
-- Smoke tests: `python3 scripts/smoke/make_test_png.py` once, then `python3 scripts/smoke/smokeN.py` after `npm run artifact`. They drive headless Chromium at phone size (`--use-gl=swiftshader` so WebGL works): smoke4 crop flow, smoke5 home screen + zoom buttons, smoke6 pinch, smoke7 objects beyond page + export, smoke8 export while zoomed, smoke9 snapping, smoke10 align/lock/group, smoke11 filters + auto, smoke12 style, smoke13 multi-page + JPG + export all, smoke14 one-finger pan + page reorder, smoke15 gradients, smoke16 SVG + PDF export, smoke17 templates + brand colors, smoke18 all shapes, smoke19 profiles (passcode, lock, backup, restore, delete). They read saved designs straight from IndexedDB.
+- Smoke tests: `python3 scripts/smoke/make_test_png.py` once, then `python3 scripts/smoke/smokeN.py` after `npm run artifact`. They drive headless Chromium at phone size (`--use-gl=swiftshader` so WebGL works): smoke4 crop flow, smoke5 home screen + zoom buttons, smoke6 pinch, smoke7 objects beyond page + export, smoke8 export while zoomed, smoke9 snapping, smoke10 align/lock/group, smoke11 filters + auto, smoke12 style, smoke13 multi-page + JPG + export all, smoke14 one-finger pan + page reorder, smoke15 gradients, smoke16 SVG + PDF export, smoke17 templates + brand colors, smoke18 all shapes, smoke19 profiles (passcode, encryption at rest, lock, backup, restore, delete). `shots.py` saves phone and desktop screenshots of the main states for design review.
+- Design check (taste skill): `inspect.mjs --app dist/artifact.html` needs `CHROME_PATH` pointing at a wrapper that adds `--no-sandbox` (root in the container). They read saved designs straight from IndexedDB.
 
 **How to work with the owner (Parker)**
 - On a phone only for now, so verify with headless screenshots and say plainly that it was not tried on a real phone.
@@ -37,14 +41,14 @@ Process rule: any new focus the owner states in chat is added to this list in th
 - The artifact viewer blocks downloads, so Export shows the image and says press-and-hold to save; the Download button is hidden when `'claude' in window`. A "download link" warning on publish is expected.
 
 **File map (`src/`)**
-- `main.ts` canvas, view (zoom/pan), page drawing, history, autosave, home screen, selection toolbar, style/align/group/lock, export. `editor.ts` photo edit session (Adjust/Filters/Mine/Crop tabs, Auto, thumbnails, copy/paste edits, presets). `crop.ts` + `cropMath.ts` crop overlay and pure geometry. `adjust.ts` the WebGL shader (`fabric.Image.filters.Adjust`). `photoModel.ts` `PhotoEdit`, 15 adjustments, built-in looks, `effective`, `autoAdjust`. `model.ts` `Design`/`Page` format. `store.ts` IndexedDB. `fonts.ts`, `sizes.ts`, `icons.ts`. `index.html` holds all CSS (theme tokens, light/dark) and markup.
+- `main.ts` canvas, view (zoom/pan), page drawing, history, autosave, home screen, selection toolbar, style/align/group/lock, export. `editor.ts` photo edit session (Adjust/Filters/Mine/Crop tabs, Auto, thumbnails, copy/paste edits, presets). `crop.ts` + `cropMath.ts` crop overlay and pure geometry. `adjust.ts` the WebGL shader (`fabric.Image.filters.Adjust`). `photoModel.ts` `PhotoEdit`, 15 adjustments, built-in looks, `effective`, `autoAdjust`. `model.ts` `Design`/`Page` format. `store.ts` IndexedDB. `fonts.ts` (design fonts), `uifont.ts` (bundled IBM Plex Sans for the interface, inlined by `vite.config.ts`), `sizes.ts`, `icons.ts`. `accounts.ts` profiles, `vault.ts` crypto, `secure.ts` encrypted small values, `protect.ts` passcode changes. `index.html` holds all CSS (theme tokens, light/dark) and markup. Layout: phone = top bar, stage, tool row, tab bar; at 960px and up a grid with the tabs as a left rail, the tool row above the stage and sheets docked left.
 - The data model block below is the long-term target. What is built: `Design { id, title, pages[] }`, `Page { id, width, height, background, objects }` where `objects` is raw Fabric JSON. Custom per-object fields (`edit`, `orig`, `locked`) are listed in `PROPS` in `main.ts` and must be passed to every `toJSON`.
 
 **Design decisions and gotchas worth remembering**
 - **Canvas fills the stage, the page is drawn inside it.** View = Fabric viewport transform (`fit()` sets it from `vz`, `vx`, `vy`). `raw._renderBackground` draws the page and its shadow; `raw.drawControls` first fades everything outside the page, re-draws the selected object at full strength (clipped to outside the page), draws snapping guides, then the real handles. These two overrides use Fabric internals that are not in the type defs (`raw` cast at the top of `main.ts`).
 - **Export and thumbnails** go through `pageImage()`, which crops `toDataURL` to the page rectangle and sets `exporting` so the fade, shadow, guides and handles are skipped. Anything outside the page is therefore never exported.
 - **History** is full-JSON snapshots with a `busy` flag and `batch()` to make several changes one undo step. History is not saved, only the current design is.
-- **Profiles:** `accounts.ts` keeps the profile list in localStorage (`canva-lite:accounts`) and the current one in `canva-lite:account`. Switching reloads the page. All per-user storage goes through `scope()`/`dbName()`: the first profile (id `local`, shown as "Me") keeps the original names (`canva-lite` database, `canva-lite:presets`, `canva-lite:brand`, `canva-lite:last`), others add `-<id>` or `:<id>`. A passcode is only a lock screen (data is not encrypted, nothing syncs). The unlock flag lives in sessionStorage.
+- **Profiles:** `accounts.ts` keeps the profile list in localStorage (`canva-lite:accounts`) and the current one in `canva-lite:account`. Switching reloads the page. All per-user storage goes through `scope()`/`dbName()`: the first profile (id `local`, shown as "Me") keeps the original names (`canva-lite` database, `canva-lite:presets`, `canva-lite:brand`, `canva-lite:last`), others add `-<id>` or `:<id>`. With a passcode, everything is encrypted: `vault.ts` derives an AES-GCM-256 key with PBKDF2-SHA256 (600k rounds) from the passcode and a per-profile salt, keeps it in memory only, and checks it against an encrypted canary on the profile. IndexedDB records become `{ id, enc }`; presets and brand colors go through `secure.ts` (`enc1:` strings). `protect.ts` re-encrypts everything when the passcode is set, changed or removed. A reload drops the key, so the lock screen shows again (that is why rename/restore no longer reload). Wrong guesses double a wait (2s up to 60s, kept in localStorage); a hidden tab locks after 5 minutes.
 - **Saving:** IndexedDB with two stores, `designs` (full) and `meta` (title, thumbnail, size, updated). Autosave is debounced 500 ms and only runs once `live` is true. A blank, never-edited design is not saved. The old localStorage slot (`canva-lite:design`) is migrated once. Last-open id is in localStorage `canva-lite:last`. User presets are in localStorage `canva-lite:presets`.
 - **Photo edits are parameters** (`PhotoEdit`), rendered by one WebGL filter. Crop is the exception: it is baked into pixels from the retained original (`orig.src`) so Fabric clipping and rotation stay simple, and the crop params are stored so it can be re-edited.
 - **Touch:** two-finger pinch/pan is intercepted in the capture phase on `#stage` before Fabric sees it, and anything the first finger started is rolled back (`grab`). Handles are corner-only and shrink with small objects (`before:render` hook).
@@ -60,7 +64,8 @@ Process rule: any new focus the owner states in chat is added to this list in th
 - Locked items can still be deleted. Text and photos inside a group cannot be edited until ungrouped. Corner radius is rectangles only.
 - Undo does not cross designs or pages.
 - Templates are built in code (`src/templates.ts`); there is no template search, categories or user-saved templates yet. Brand kit is colors only (no logos or brand fonts). No Magic Resize.
-- Passcode protection is a lock screen only: anyone with the browser's dev tools can read the data. A forgotten passcode cannot be recovered; delete the profile from another profile, or clear site data.
+- Encryption protects data at rest only: profile names, design count and the last-open id are visible; anyone who can run code in the page while it is unlocked can read it. A forgotten passcode cannot be recovered; delete the profile from another profile, or clear site data. Backup files are plain JSON (not encrypted) — warn before sharing them.
+- Security still to do: validate restored backups field by field (only `data:image/` sources), a Content-Security-Policy, and bundling the design fonts (`fonts.ts` still loads them from Google Fonts; the UI font is bundled).
 - Backup files cannot be downloaded inside the artifact viewer (the build step works, the download does not). They work when the app is run normally (`npm run dev`, or a deployed copy).
 - Never tried on a real phone; everything was checked in headless Chromium.
 
@@ -168,7 +173,7 @@ Owner decision: no stock or asset library. Just basic shapes.
 
 ## Phase 5: Export, accounts, sharing (M5)
 Owner decision: accounts are local to the device (profiles in the browser, optional passcode, file backup). No Google or other sign-in.
-- Done: local profiles (`src/accounts.ts`): several profiles per device, each with its own designs, looks and brand colors; optional passcode (PBKDF2 hash, asked once per browser session); Lock now; rename and delete a profile; backup file (designs, looks, brand colors) and restore. Open it from the profile button on Home. smoke19
+- Done: local profiles (`src/accounts.ts`): several profiles per device, each with its own designs, looks and brand colors; optional passcode that encrypts the profile's data (asked on every open); Lock now; rename and delete a profile; backup file (designs, looks, brand colors) and restore. Open it from the profile button on Home. smoke19
 - Cloud accounts (Supabase or Lucia, Postgres): dropped unless the owner asks
 - Share by link: view-only and "make a copy" (no live co-editing)
 - Export pipeline: server render for large PDFs; GIF and MP4 of simple page sequences

@@ -4,205 +4,270 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>Canva Lite</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<title>SimplyCanva</title>
 <style>
-  /* Layout: one-screen editor. Top bar, canvas stage with a bottom sheet, contextual toolbar, bottom tabs. */
+  /* Framed sheet: the chrome is one green-grey frame (from the brand teal); the work sits in a well with a hairline edge.
+     Colour lives on the design and the selection, not on the chrome. Primary action is near-black.
+     Phone: top bar 48 · stage edge to edge · tool row 56 · tab bar 60.
+     Desktop (>= 960): grid "top top / tabs ctx / tabs stage", columns 84px + 1fr, stage inset 8px from right and bottom. */
   :root {
-    --font-ui: 'Instrument Sans', system-ui, sans-serif;
-    --font-brand: 'Bricolage Grotesque', 'Instrument Sans', system-ui, sans-serif;
-    --bg: #e8eceb;
-    --panel: #f8faf9;
-    --stage: #d9e0de;
-    --ink: #16211f;
-    --muted: #5a6a67;
-    --line: #d0d9d7;
-    --hover: #e9efed;
-    --accent: #0b7f78;
-    --accent-ink: #ffffff;
-    --accent-soft: #d3ede9;
+    --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --ground: #f2f5f4;   /* the frame */
+    --well: #e7ecea;     /* the stage, one step darker */
+    --surface: #ffffff;  /* sheets, dialogs, cards */
+    --raised: #f6f8f7;
+    --active: #e3e8e6;
+    --border: #dde3e1;
+    --rule: #eaeeec;
+    --control: #c7cfcc;
+    --ink: #131416;
+    --muted: #59615f;
+    --primary: #131416; --primary-ink: #ffffff;
+    --accent: #0e7c74;   /* brand teal: selection, the active tab mark, the logo */
+    --scrim: rgb(19 20 22 / .45);
+    --radius-sheet: 16px; --radius-card: 10px; --radius-control: 8px;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #0f1514; --panel: #182120; --stage: #0b100f; --ink: #e6efed; --muted: #9db1ad;
-      --line: #2a3735; --hover: #223130; --accent: #3cc3b9; --accent-ink: #06201d; --accent-soft: #17403c;
+      --ground: #0d0f0f; --well: #050606; --surface: #161918; --raised: #1c201f; --active: #262b2a;
+      --border: #262b2a; --rule: #1d2120; --control: #434a48; --ink: #f2f5f4; --muted: #a9b2b0;
+      --primary: #f2f5f4; --primary-ink: #0d0f0f; --accent: #3cc3b9; --scrim: rgb(0 0 0 / .6);
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #0f1514; --panel: #182120; --stage: #0b100f; --ink: #e6efed; --muted: #9db1ad;
-    --line: #2a3735; --hover: #223130; --accent: #3cc3b9; --accent-ink: #06201d; --accent-soft: #17403c;
+    --ground: #0d0f0f; --well: #050606; --surface: #161918; --raised: #1c201f; --active: #262b2a;
+    --border: #262b2a; --rule: #1d2120; --control: #434a48; --ink: #f2f5f4; --muted: #a9b2b0;
+    --primary: #f2f5f4; --primary-ink: #0d0f0f; --accent: #3cc3b9; --scrim: rgb(0 0 0 / .6);
     color-scheme: dark;
   }
 
   [hidden] { display: none !important; }
   html, body { height: 100%; }
   body {
-    margin: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden;
-    padding-block: 8px;
-    padding-left: max(16px, env(safe-area-inset-left, 0px));
-    padding-right: max(16px, env(safe-area-inset-right, 0px));
-    background: var(--bg); color: var(--ink);
-    font: 14px/1.35 var(--font-ui); touch-action: manipulation;
+    margin: 0; display: flex; flex-direction: column; overflow: hidden;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    background: var(--ground); color: var(--ink);
+    font: 14px/1.4 var(--font-ui); touch-action: manipulation; -webkit-font-smoothing: antialiased;
   }
   button, select, input { font-family: inherit; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  h1, h2 { margin: 0; }
 
-  .bar { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
-  #top { display: flex; align-items: center; gap: 4px; padding: 6px 8px; }
-  .brand { font: 700 17px var(--font-brand); letter-spacing: -0.01em; margin-right: auto; padding-left: 4px; white-space: nowrap; }
-  #top .tool { min-width: 44px; padding-inline: 4px; }
+  /* top bar */
+  #top { display: flex; align-items: center; gap: 2px; height: 52px; flex: none; padding: 0 8px 0 4px; }
+  .mark { display: flex; align-items: center; gap: 2px; height: 44px; padding: 0 6px 0 2px; border: 0; border-radius: var(--radius-control); background: none; color: var(--muted); cursor: pointer; }
+  .mark:hover { background: var(--active); }
+  .mark .logo { display: block; width: 26px; height: 26px; }
+  .mark .chev { width: 18px; height: 18px; }
+  #doc-title { flex: 1; min-width: 0; padding-left: 6px; font: 600 16px/1.2 var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .divider { flex: none; width: 1px; height: 24px; margin: 0 6px; background: var(--border); }
 
   .tool {
-    position: relative; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-    min-width: 56px; min-height: 48px; padding: 4px 8px; border: 0; border-radius: 10px;
-    background: transparent; color: var(--ink); font: 500 11px/1.1 var(--font-ui); cursor: pointer;
+    position: relative; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-width: 56px; min-height: 48px; padding: 4px 8px; border: 0; border-radius: var(--radius-control);
+    background: transparent; color: var(--ink); font: 500 12px/1.1 var(--font-ui); cursor: pointer;
   }
-  .tool:hover { background: var(--hover); }
-  .tool[disabled] { opacity: .35; pointer-events: none; }
-  .tool[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+  .tool svg { width: 20px; height: 20px; }
+  .tool:hover { background: var(--active); }
+  .tool:active { transform: scale(.96); }
+  .tool[disabled] { color: var(--muted); opacity: .45; pointer-events: none; }
+  .tool[aria-pressed="true"] { background: var(--active); }
+  .tool.icon { min-width: 44px; min-height: 44px; padding: 0; }
   .tool.glyph { font-size: 17px; min-width: 44px; }
+
   .btn {
-    border: 0; border-radius: 10px; padding: 10px 16px; min-height: 44px; cursor: pointer;
-    background: var(--accent); color: var(--accent-ink); font: 600 14px var(--font-ui);
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border: 0; border-radius: var(--radius-control); padding: 0 16px; min-height: 40px; cursor: pointer; text-decoration: none;
+    background: var(--primary); color: var(--primary-ink); font: 600 14px var(--font-ui);
   }
-  .btn.quiet { background: var(--hover); color: var(--ink); }
+  .btn:active { transform: scale(.98); }
+  .btn.quiet { background: var(--surface); color: var(--ink); border: 1px solid var(--control); }
+  .btn.quiet:hover { background: var(--raised); }
+  #top .btn { min-height: 36px; padding: 0 14px; }
 
-  #stage { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden; border-radius: 14px; background: var(--stage); }
+  /* stage: the well the page sits in */
+  #stage { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden; background: var(--well); }
+  #stage, #stage .canvas-container, #stage canvas { touch-action: none; }
+  .canvas-container { position: absolute; }
+  .float { position: absolute; z-index: 3; top: 12px; display: flex; align-items: center; min-height: 36px; border-radius: var(--radius-control); background: var(--surface); border: 1px solid var(--border); box-sizing: border-box; color: var(--ink); }
+  #pager { left: 12px; padding: 0 12px; border: 0; font: 500 13px var(--font-ui); cursor: pointer; font-variant-numeric: tabular-nums; }
+  #pager:hover, #zoom button:hover { background: var(--raised); }
+  #zoom { right: 12px; overflow: hidden; }
+  #zoom button { min-width: 40px; min-height: 36px; border: 0; background: none; color: var(--ink); font: 500 16px var(--font-ui); cursor: pointer; }
+  #zoom button:disabled { color: var(--muted); }
+  #zoom #zoom-fit { min-width: 48px; font-size: 13px; border-inline: 1px solid var(--border); }
 
-  #ctx { display: flex; align-items: center; gap: 4px; padding: 6px; overflow-x: auto; min-height: 60px; }
-  #ctx .grp { display: flex; align-items: center; gap: 4px; flex: none; }
-  #ctx .grp:not([hidden]) ~ .grp { border-left: 1px solid var(--line); padding-left: 4px; }
+  /* tool row for the selection, and the tab bar */
+  #ctx { display: flex; align-items: center; gap: 2px; padding: 4px 8px; overflow-x: auto; min-height: 60px; flex: none; scrollbar-width: none; border-bottom: 1px solid var(--rule); }
+  #ctx .grp { display: flex; align-items: center; gap: 2px; flex: none; }
+  #ctx .grp:not([hidden]) ~ .grp { border-left: 1px solid var(--border); padding-left: 6px; margin-left: 4px; }
   #ctx-hint { color: var(--muted); padding: 0 8px; }
   select, input[type=number] {
-    min-height: 40px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px;
-    background: var(--panel); color: var(--ink); font-size: 16px;
+    min-height: 40px; padding: 6px 8px; border: 1px solid var(--control); border-radius: var(--radius-control);
+    background: var(--surface); color: var(--ink); font-size: 16px;
   }
   #font { width: 150px; }
-  #fsize { width: 60px; text-align: center; }
-  .swatch { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); background: var(--sw, #000); }
+  #fsize { width: 68px; text-align: center; font-variant-numeric: tabular-nums; }
+  .swatch { width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%; border: 1px solid rgb(0 0 0 / .15); background: var(--sw, #000); }
   .tool input[type=color] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
 
-  #tabs { display: grid; grid-template-columns: repeat(5, 1fr); padding: 4px; gap: 2px; }
-  #tabs .tool { min-width: 0; }
+  #tabs { display: grid; grid-template-columns: repeat(5, 1fr); padding: 2px 12px 4px; gap: 2px; flex: none; }
+  #tabs .tool { min-width: 0; min-height: 56px; color: var(--muted); }
+  #tabs .tool[aria-pressed="true"] { background: none; color: var(--ink); }
+  #tabs .tool[aria-pressed="true"]::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 2px; border-radius: 2px; background: var(--accent); }
 
+  /* bottom sheet (floats over the stage) */
   .sheet {
     position: absolute; left: 8px; right: 8px; bottom: 8px; max-height: 72%; overflow: auto; z-index: 5;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px;
-    box-shadow: 0 8px 28px rgb(0 0 0 / .22);
+    background: var(--surface); border-radius: var(--radius-sheet); padding: 8px 16px 16px;
+    border: 1px solid var(--border); box-shadow: 0 12px 32px rgb(0 0 0 / .16); /* floats over the stage */
   }
-  .sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .sheet-head h2 { margin: 0; font: 600 12px var(--font-ui); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .sheet-head { position: sticky; top: -8px; z-index: 1; display: flex; align-items: center; justify-content: space-between; min-height: 52px; margin: -8px -16px 8px; padding: 0 8px 0 16px; background: var(--surface); }
+  .sheet-head h2 { font: 600 16px var(--font-ui); color: var(--ink); }
+  .sheet-head .btn { min-height: 36px; }
   .list { display: flex; flex-direction: column; gap: 8px; }
   .opt {
     display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 12px; text-align: left;
-    border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); cursor: pointer; font: inherit;
+    border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); color: var(--ink); cursor: pointer; font: inherit;
   }
-  .opt:hover { background: var(--hover); }
-  .opt small { display: block; color: var(--muted); font-size: 12px; }
-  .opt .ar { height: 28px; max-width: 48px; border: 2px solid var(--accent); border-radius: 3px; flex: none; }
+  .opt:hover { background: var(--raised); border-color: var(--control); }
+  .opt:active { transform: scale(.99); }
+  .opt[aria-pressed="true"] { border-color: var(--ink); outline: 1px solid var(--ink); outline-offset: -2px; }
+  .opt small { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .opt .ar { height: 28px; max-width: 48px; border: 1.5px solid var(--ink); border-radius: 3px; flex: none; }
   .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .grid3 .opt { flex-direction: column; justify-content: center; text-align: center; gap: 4px; padding: 14px 6px; }
+  .grid3 .opt { flex-direction: column; justify-content: center; text-align: center; gap: 6px; padding: 14px 6px; }
+  .grid3 .opt svg { width: 22px; height: 22px; }
   .swatches { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
-  .swatches button { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); cursor: pointer; }
+  .swatches button { width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgb(0 0 0 / .15); cursor: pointer; }
+  .swatches button:active { transform: scale(.94); }
   .pick { position: relative; display: inline-flex; align-items: center; gap: 10px; min-height: 48px; }
   .pick input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
   .pick .swatch { width: 40px; height: 40px; }
 
   .toast {
-    position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6; max-width: calc(100% - 24px);
-    display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 10px;
-    background: var(--ink); color: var(--bg); font-weight: 500;
+    position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 6; max-width: calc(100% - 24px);
+    display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: var(--radius-control);
+    background: var(--primary); color: var(--primary-ink); font-weight: 500; box-shadow: 0 8px 24px rgb(0 0 0 / .18); /* a toast floats */
   }
-  .toast button { border: 0; background: none; color: inherit; font: 700 14px var(--font-ui); text-decoration: underline; cursor: pointer; padding: 4px; }
+  .toast button { border: 0; background: none; color: inherit; font: 600 14px var(--font-ui); text-decoration: underline; cursor: pointer; padding: 4px; }
 
-
-  #stage, #stage .canvas-container, #stage canvas { touch-action: none; }
-  .canvas-container { position: absolute; }
-  #zoom { position: absolute; right: 10px; top: 10px; z-index: 3; display: flex; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); overflow: hidden; }
-  #zoom button { min-width: 44px; min-height: 40px; border: 0; background: none; color: var(--ink); font: 600 15px var(--font-ui); cursor: pointer; }
-  #zoom button:disabled { opacity: .35; }
-  #zoom #zoom-fit { min-width: 56px; font-size: 13px; border-inline: 1px solid var(--line); }
-  .overlay.home { place-items: start center; overflow: auto; background: var(--bg); }
-  .home-in { width: min(100%, 720px); display: flex; flex-direction: column; gap: 12px; padding-bottom: 24px; }
-  .home-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .home-head h1 { flex: 1; min-width: 0; margin: 0; font: 700 28px var(--font-brand); letter-spacing: -0.02em; }
-  .home h2 { margin: 8px 0 0; font: 700 15px var(--font-ui); color: var(--muted); }
-  .home #start-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
-  .tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
-  .tpl { display: flex; flex-direction: column; gap: 6px; align-items: stretch; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); font: 600 13px var(--font-ui); cursor: pointer; text-align: left; }
-  .tpl img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border-radius: 8px; background: var(--stage); }
-  .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-  .dcard { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
-  .dcard .thumb { aspect-ratio: 1; display: grid; place-items: center; border: 0; border-radius: 8px; background: var(--stage); cursor: pointer; padding: 0; overflow: hidden; }
-  .dcard .thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
-  .dcard input { min-width: 0; min-height: 36px; padding: 4px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--ink); font: 600 15px var(--font-ui); }
-  .dcard input:focus { border-color: var(--line); background: var(--bg); }
-  .dcard .meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; color: var(--muted); font-size: 12px; padding: 0 4px; }
-  .dcard .meta button { border: 0; background: none; color: var(--muted); font: 600 12px var(--font-ui); text-decoration: underline; min-height: 36px; padding: 0 6px; cursor: pointer; }
-
+  /* overlays: home, profiles, lock, export */
   .overlay {
-    position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgb(10 20 18 / .6);
+    position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: var(--scrim);
     padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
   }
-  .dialog { width: min(100%, 440px); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: 18px; background: var(--panel); border: 1px solid var(--line); }
-  .dialog h1 { margin: 0; font: 700 26px var(--font-brand); letter-spacing: -0.02em; text-wrap: balance; }
+  .dialog { width: min(100%, 460px); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 24px; border-radius: var(--radius-sheet); background: var(--surface); border: 1px solid var(--border); box-shadow: 0 24px 48px rgb(0 0 0 / .2); /* a dialog floats */ }
+  .dialog h1 { font: 600 22px/1.25 var(--font-ui); letter-spacing: -0.01em; text-wrap: balance; }
+  .dialog h2 { margin-top: 12px; font: 600 16px var(--font-ui); }
   .dialog p { margin: 0; color: var(--muted); }
-  #export-img { max-width: 100%; max-height: 52vh; object-fit: contain; align-self: center; border-radius: 8px; border: 1px solid var(--line); background: repeating-conic-gradient(var(--hover) 0 25%, var(--panel) 0 50%) 0 0 / 16px 16px; }
+  .dialog input:not([type=file]) { min-height: 44px; padding: 8px 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--ink); font-size: 16px; }
+  #lock { z-index: 40; background: var(--ground); }
+  #lock-err { color: #c4242a; }
+  #export-img { max-width: 100%; max-height: 52vh; object-fit: contain; align-self: center; border-radius: var(--radius-control); border: 1px solid var(--border); background: repeating-conic-gradient(var(--raised) 0 25%, var(--surface) 0 50%) 0 0 / 16px 16px; /* taste-skill-ignore: the transparency checkerboard, not decoration */ }
   .row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .row > * { flex: 1; text-align: center; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+  .row > * { flex: 1; text-align: center; }
 
-  /* photo editor replaces the top bar, toolbar and tabs while it is open */
-  body[data-editing] #top, body[data-editing] #ctx, body[data-editing] #tabs { display: none; }
-  #editor { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
+  .overlay.home { display: block; overflow: auto; background: var(--ground); padding-top: max(8px, env(safe-area-inset-top, 0px)); }
+  .home-in { width: min(100%, 1120px); margin: 0 auto; display: flex; flex-direction: column; gap: 16px; padding-bottom: 40px; }
+  .home-bar { display: flex; align-items: center; gap: 8px; min-height: 52px; }
+  .wordmark { display: flex; align-items: center; gap: 8px; margin-right: auto; font: 600 17px var(--font-ui); letter-spacing: -0.01em; }
+  .wordmark .logo { width: 28px; height: 28px; }
+  .home-in > h1 { margin-top: 8px; font: 600 26px/1.2 var(--font-ui); letter-spacing: -0.015em; }
+  .home-sub { margin: -10px 0 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .home h2 { margin-top: 16px; font: 600 16px var(--font-ui); }
+  .home #start-list { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(140px, 1fr); overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding-inline: 16px; }
+  .home #start-list .opt { flex-direction: column; align-items: flex-start; gap: 10px; min-height: 112px; justify-content: space-between; }
+  .home #start-list .opt .ar { height: 36px; max-width: 64px; }
+  .tgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+  .tpl { display: flex; flex-direction: column; gap: 8px; align-items: stretch; padding: 0 0 10px; border: 0; border-radius: var(--radius-card); background: none; color: var(--ink); font: 500 14px var(--font-ui); cursor: pointer; text-align: left; }
+  .tpl img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border-radius: var(--radius-card); background: var(--well); padding: 10px; box-sizing: border-box; }
+  .tpl:hover img { background: var(--active); }
+  .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr)); gap: 16px; }
+  @media (max-width: 420px) { .dgrid { grid-template-columns: 1fr 1fr; } }
+  .dcard { display: flex; flex-direction: column; gap: 4px; }
+  .dcard .thumb { aspect-ratio: 1; display: grid; place-items: center; border: 0; border-radius: var(--radius-card); background: var(--well); cursor: pointer; padding: 12px; overflow: hidden; }
+  .dcard .thumb:hover { background: var(--active); }
+  .dcard .thumb img { max-width: 100%; max-height: 100%; object-fit: contain; outline: 1px solid rgb(0 0 0 / .06); }
+  .dcard input { min-width: 0; min-height: 36px; padding: 4px 6px; margin-inline: -6px; border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--ink); font: 500 14px var(--font-ui); }
+  .dcard input:focus { border-color: var(--control); background: var(--surface); }
+  .dcard .meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; white-space: nowrap; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .dcard .meta button { border: 0; background: none; color: var(--muted); font: 500 12px var(--font-ui); text-decoration: underline; min-height: 36px; padding: 0 2px; cursor: pointer; }
+  .dcard .meta button:hover { color: var(--ink); }
+  .brand-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .brand-row .swatches { margin: 0; }
+
+  /* photo editor replaces the top bar, tool row and tabs while it is open */
+  body[data-editing] #top, body[data-editing] #ctx, body[data-editing] #tabs, body[data-editing] #zoom, body[data-editing] #pager { display: none; }
+  #editor { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px 12px; background: var(--surface); border-top: 1px solid var(--border); flex: none; }
   .ed-head { display: flex; align-items: center; gap: 4px; }
-  .ed-head .tool { flex: 1; }
-  #ed-compare { background: var(--hover); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .ed-head .tool { flex: 1; font-size: 14px; }
+  #ed-compare { background: var(--raised); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   .ed-head .btn { flex: 1; }
-  .ed-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
-  #crop { position: absolute; inset: 0; z-index: 4; background: var(--stage); }
+  .ed-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; border-bottom: 1px solid var(--rule); }
+  .ed-tabs .tool { min-height: 40px; font-size: 14px; color: var(--muted); border-radius: 0; }
+  .ed-tabs .tool[aria-pressed="true"] { background: none; color: var(--ink); border-bottom: 2px solid var(--accent); }
+  #crop { position: absolute; inset: 0; z-index: 4; background: var(--well); }
   #crop canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-  .ed-tabs .tool { min-height: 40px; font-size: 14px; }
   .dial { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0; scrollbar-width: none; }
   .chip {
     position: relative; flex: none; min-height: 40px; padding: 8px 14px; border-radius: 999px; cursor: pointer;
-    border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 500 14px var(--font-ui);
+    border: 1px solid var(--control); background: var(--surface); color: var(--ink); font: 500 14px var(--font-ui);
   }
-  body[data-editing] #zoom, body[data-editing] #pager { display: none; }
-  #pager { position: absolute; left: 10px; top: 10px; z-index: 3; min-height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 600 13px var(--font-ui); cursor: pointer; }
+  .chip:hover { background: var(--raised); }
+  .chip:active { transform: scale(.97); }
   #export-more { display: flex; flex-direction: column; gap: 10px; }
-  #export-more img { width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+  #export-more img { width: 100%; border-radius: var(--radius-control); border: 1px solid var(--border); box-sizing: border-box; }
   .fmt { display: flex; gap: 6px; }
-  .chip.th { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 4px 7px; min-width: 72px; border-radius: 12px; font-size: 12px; }
-  .chip.th img { width: 64px; height: 64px; border-radius: 8px; display: block; }
-  .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .chip.th { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 4px 7px; min-width: 72px; border-radius: var(--radius-card); font-size: 12px; }
+  .chip.th img { width: 64px; height: 64px; border-radius: 6px; display: block; }
+  .chip[aria-pressed="true"] { background: var(--primary); color: var(--primary-ink); border-color: transparent; }
   .chip.changed::after { content: ""; position: absolute; top: 5px; right: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-  .chip.changed[aria-pressed="true"]::after { background: var(--accent-ink); }
+  .chip.changed[aria-pressed="true"]::after { background: var(--primary-ink); }
   .slide { display: flex; align-items: center; gap: 10px; min-height: 48px; }
-  .slide-name { flex: none; min-width: 96px; font-weight: 600; }
-  .slide input[type=range] { flex: 1; min-width: 0; height: 36px; accent-color: var(--accent); }
+  .slide-name { flex: none; min-width: 96px; font-weight: 500; }
+  .slide input[type=range] { flex: 1; min-width: 0; height: 36px; accent-color: var(--ink); }
   .slide output { flex: none; min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
   .prows { display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow: auto; margin-bottom: 6px; }
   .prow { display: flex; align-items: center; gap: 6px; }
-  .prow input { flex: 1; min-width: 0; min-height: 40px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font-size: 16px; }
+  .prow input { flex: 1; min-width: 0; min-height: 40px; padding: 6px 10px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--ink); font-size: 16px; }
   .muted { color: var(--muted); margin: 4px 0 10px; }
 
-  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+  /* desktop: tabs become a labelled rail, the tool row sits above the stage, the stage is a framed sheet */
+  @media (min-width: 960px) {
+    body { display: grid; grid-template: "top top" 52px "tabs ctx" auto "tabs stage" 1fr / 96px 1fr; }
+    #top { grid-area: top; padding-right: 12px; }
+    #ctx { grid-area: ctx; border-bottom: 0; padding: 0 8px 4px 0; min-height: 56px; }
+    #tabs { grid-area: tabs; display: flex; flex-direction: column; padding: 4px 8px 4px 16px; gap: 4px; }
+    #tabs .tool { min-height: 64px; }
+    #tabs .tool[aria-pressed="true"] { background: var(--active); }
+    #tabs .tool[aria-pressed="true"]::before { top: 18px; bottom: 18px; left: -8px; right: auto; width: 2px; height: auto; }
+    #stage { grid-area: stage; margin: 0 8px 8px 0; border-radius: var(--radius-sheet); border: 1px solid var(--border); }
+    .sheet { left: 12px; top: 60px; bottom: auto; right: auto; width: 360px; max-height: calc(100% - 72px); }
+    body[data-editing] { grid-template: "stage" 1fr "editor" auto / 1fr; }
+    body[data-editing] #stage { margin: 8px 8px 0; }
+    #editor { grid-area: editor; width: min(100%, 760px); justify-self: center; box-sizing: border-box; border-top: 0; background: none; }
+    .home-in { padding-inline: 24px; box-sizing: border-box; }
+  }
+  @media (max-width: 959px) { .home-in { padding-inline: 16px; box-sizing: border-box; } .overlay.home { padding-inline: 0; } }
+
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } .tool:active, .btn:active, .opt:active, .chip:active { transform: none; } }
 </style>
 </head>
 <body>
-  <header id="top" class="bar">
-    <span class="brand">Canva Lite</span>
-    <button class="tool" data-act="home" aria-label="Home: my designs and new design"><span data-icon="home"></span>Home</button>
-    <button class="tool" id="undo" data-act="undo" aria-label="Undo" disabled><span data-icon="undo"></span></button>
-    <button class="tool" id="redo" data-act="redo" aria-label="Redo" disabled><span data-icon="redo"></span></button>
+  <header id="top">
+    <button class="mark" data-act="home" aria-label="Home: my designs and new design"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg><svg class="logo" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="2" width="24" height="24" rx="6" fill="var(--accent)"/><rect x="7" y="7" width="14" height="14" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="2.2" fill="#fff"/><path d="M10 17.5h8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></button>
+    <h1 id="doc-title">Untitled design</h1>
+    <button class="tool icon" id="undo" data-act="undo" aria-label="Undo" disabled><span data-icon="undo"></span></button>
+    <button class="tool icon" id="redo" data-act="redo" aria-label="Redo" disabled><span data-icon="redo"></span></button>
+    <span class="divider"></span>
     <button class="btn" data-act="export">Export</button>
   </header>
 
   <main id="stage">
-    <button id="pager" data-act="pages" aria-label="Pages">Page 1 of 1</button>
-    <div id="zoom"><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-fit" aria-label="Zoom to fit">Fit</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
+    <button id="pager" class="float" data-act="pages" aria-label="Pages">Page 1 of 1</button>
+    <div id="zoom" class="float"><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-fit" aria-label="Zoom to fit">Fit</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
     <canvas id="c"></canvas>
     <div id="crop" hidden><canvas id="crop-cv" aria-label="Crop frame. Drag the corners or the middle."></canvas></div>
     <div id="toast" class="toast" role="status" hidden></div>
@@ -211,8 +276,8 @@
       <div class="sheet-head"><h2 id="sheet-title"></h2><button class="btn quiet" data-act="closeSheet">Done</button></div>
 
       <section data-sheet="text" data-title="Add text" class="list" hidden>
-        <button class="opt" data-text="heading"><span style="font:700 22px var(--font-brand)">Add a heading</span></button>
-        <button class="opt" data-text="sub"><span style="font:600 17px var(--font-ui)">Add a subheading</span></button>
+        <button class="opt" data-text="heading"><span style="font:600 22px var(--font-ui)">Add a heading</span></button>
+        <button class="opt" data-text="sub"><span style="font:500 17px var(--font-ui)">Add a subheading</span></button>
         <button class="opt" data-text="body"><span>Add body text</span></button>
       </section>
 
@@ -268,7 +333,7 @@
   </main>
 
   <nav id="ctx" class="bar" aria-label="Edit selected item">
-    <span id="ctx-hint">Tap anything on the page to edit it, or add something below.</span>
+    <span id="ctx-hint">Tap anything on the page to edit it, or add text, shapes and photos.</span>
 
     <div class="grp" data-for="text" hidden>
       <select id="font" aria-label="Font"></select>
@@ -369,23 +434,28 @@
 
   <div id="home" class="overlay home" hidden>
     <div class="home-in">
-      <div class="home-head">
-        <h1>Canva Lite</h1>
+      <div class="home-bar">
+        <span class="wordmark"><svg class="logo" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="2" width="24" height="24" rx="6" fill="var(--accent)"/><rect x="7" y="7" width="14" height="14" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="2.2" fill="#fff"/><path d="M10 17.5h8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>SimplyCanva</span>
         <button id="acct-btn" class="btn quiet" aria-label="Profiles"></button>
         <button id="home-back" class="btn" data-act="continue" hidden>Back to editor</button>
       </div>
-      <h2>New design</h2>
+      <h1>Designs</h1>
+      <p class="home-sub">Saved on this device as you work. Nothing is uploaded.</p>
+      <h2>Start a new design</h2>
       <div id="start-list" class="list"></div>
-      <h2>Start from a template</h2>
-      <div id="tpl-grid" class="tgrid"></div>
-      <h2>Brand colors</h2>
-      <p class="muted">Keep your colors here. They show up in the Background and Style menus. Tap a color to remove it.</p>
-      <div class="swatches" id="brand-manage"></div>
-      <p id="brand-empty" class="muted">No brand colors yet.</p>
-      <div class="row"><label class="pick"><span>Color</span><input id="brand-color" type="color" value="#0b7f78"></label><button id="brand-add" class="btn quiet">Add to brand</button></div>
       <h2>Your designs</h2>
       <div id="home-grid" class="dgrid"></div>
       <p id="home-empty" class="muted" hidden>Nothing saved yet. Designs you make appear here automatically.</p>
+      <h2>Start from a template</h2>
+      <div id="tpl-grid" class="tgrid"></div>
+      <h2>Brand colors</h2>
+      <p class="muted">They show up in the Background and Style menus. Tap a color to remove it.</p>
+      <div class="brand-row">
+        <div class="swatches" id="brand-manage"></div>
+        <p id="brand-empty" class="muted" style="margin:0">No brand colors yet.</p>
+        <label class="pick btn quiet"><span class="swatch" style="--sw:#0e7c74;width:20px;height:20px" id="brand-swatch"></span><span>Pick a color</span><input id="brand-color" type="color" value="#0e7c74"></label>
+        <button id="brand-add" class="btn quiet">Add to brand</button>
+      </div>
     </div>
   </div>
 
@@ -397,11 +467,12 @@
       <div class="prow"><input id="acct-name" placeholder="New profile name" aria-label="New profile name"><input id="acct-pass" type="password" placeholder="Passcode (optional)" autocomplete="new-password" aria-label="Passcode for the new profile"></div>
       <button id="acct-add" class="btn quiet">Add profile</button>
       <h2>This profile</h2>
+      <p>A passcode (8 or more characters) encrypts this profile’s designs, looks and brand colors on this device. Forget it and nothing can recover them, so keep a backup file.</p>
       <div class="prow"><input id="acct-rename" aria-label="Profile name"><input id="acct-pass2" type="password" placeholder="New passcode" autocomplete="new-password" aria-label="New passcode"></div>
       <div class="row"><button id="acct-setpass" class="btn quiet">Set passcode</button><button id="acct-nopass" class="btn quiet">Remove passcode</button></div>
       <div class="row"><button id="acct-lock" class="btn quiet">Lock now</button><button id="acct-del" class="btn quiet">Delete profile</button></div>
       <h2>Backup</h2>
-      <p class="muted">A passcode (8+ characters) encrypts this profile's designs, looks and brand colors on this device. If you forget it, nothing can recover them, so keep a backup file. It does not move to another device by itself.</p>
+      <p>A backup file moves this profile to another device or browser.</p>
       <div class="row"><button id="acct-backup" class="btn quiet">Back up this profile</button><label class="btn quiet">Restore<input id="acct-restore" type="file" accept=".json,application/json" hidden></label></div>
       <a id="acct-dl" class="btn" download hidden>Download backup</a>
       <p id="acct-note" class="muted"></p>
@@ -409,10 +480,11 @@
     </div>
   </div>
 
-  <div id="lock" class="overlay" hidden style="z-index:40;background:var(--bg)">
+  <div id="lock" class="overlay" hidden>
     <div class="dialog" role="dialog" aria-labelledby="lock-h">
-      <h1 id="lock-h">Welcome back, <span id="lock-name"></span></h1>
-      <input id="lock-pass" type="password" placeholder="Passcode" autocomplete="current-password" aria-label="Passcode" style="min-height:48px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font-size:16px">
+      <h1 id="lock-h"><span id="lock-name"></span> is locked</h1>
+      <p>Enter the passcode to open this profile’s designs.</p>
+      <input id="lock-pass" type="password" placeholder="Passcode" autocomplete="current-password" aria-label="Passcode">
       <p id="lock-err" hidden>Wrong passcode.</p>
       <button id="lock-go" class="btn">Unlock</button>
       <div id="lock-others" class="list"></div>
