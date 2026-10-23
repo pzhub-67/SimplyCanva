@@ -127,7 +127,7 @@
   .overlay.home { place-items: start center; overflow: auto; background: var(--bg); }
   .home-in { width: min(100%, 720px); display: flex; flex-direction: column; gap: 12px; padding-bottom: 24px; }
   .home-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .home-head h1 { margin: 0; font: 700 28px var(--font-brand); letter-spacing: -0.02em; }
+  .home-head h1 { flex: 1; min-width: 0; margin: 0; font: 700 28px var(--font-brand); letter-spacing: -0.02em; }
   .home h2 { margin: 8px 0 0; font: 700 15px var(--font-ui); color: var(--muted); }
   .home #start-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
   .tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
@@ -371,6 +371,7 @@
     <div class="home-in">
       <div class="home-head">
         <h1>Canva Lite</h1>
+        <button id="acct-btn" class="btn quiet" aria-label="Profiles"></button>
         <button id="home-back" class="btn" data-act="continue" hidden>Back to editor</button>
       </div>
       <h2>New design</h2>
@@ -385,6 +386,36 @@
       <h2>Your designs</h2>
       <div id="home-grid" class="dgrid"></div>
       <p id="home-empty" class="muted" hidden>Nothing saved yet. Designs you make appear here automatically.</p>
+    </div>
+  </div>
+
+  <div id="accounts" class="overlay" hidden>
+    <div class="dialog" role="dialog" aria-labelledby="acct-h">
+      <h1 id="acct-h">Profiles</h1>
+      <p class="muted">Profiles live on this device only. Each has its own designs, looks and brand colors. No account with anyone else.</p>
+      <div id="acct-list" class="list"></div>
+      <div class="prow"><input id="acct-name" placeholder="New profile name" aria-label="New profile name"><input id="acct-pass" type="password" placeholder="Passcode (optional)" autocomplete="new-password" aria-label="Passcode for the new profile"></div>
+      <button id="acct-add" class="btn quiet">Add profile</button>
+      <h2>This profile</h2>
+      <div class="prow"><input id="acct-rename" aria-label="Profile name"><input id="acct-pass2" type="password" placeholder="New passcode" autocomplete="new-password" aria-label="New passcode"></div>
+      <div class="row"><button id="acct-setpass" class="btn quiet">Set passcode</button><button id="acct-nopass" class="btn quiet">Remove passcode</button></div>
+      <div class="row"><button id="acct-lock" class="btn quiet">Lock now</button><button id="acct-del" class="btn quiet">Delete profile</button></div>
+      <h2>Backup</h2>
+      <p class="muted">A passcode only keeps casual snoopers out. It does not encrypt anything, and it does not move to another device. Use a backup file for that.</p>
+      <div class="row"><button id="acct-backup" class="btn quiet">Back up this profile</button><label class="btn quiet">Restore<input id="acct-restore" type="file" accept=".json,application/json" hidden></label></div>
+      <a id="acct-dl" class="btn" download hidden>Download backup</a>
+      <p id="acct-note" class="muted"></p>
+      <button class="btn" data-act="closeAccounts">Done</button>
+    </div>
+  </div>
+
+  <div id="lock" class="overlay" hidden style="z-index:40;background:var(--bg)">
+    <div class="dialog" role="dialog" aria-labelledby="lock-h">
+      <h1 id="lock-h">Welcome back, <span id="lock-name"></span></h1>
+      <input id="lock-pass" type="password" placeholder="Passcode" autocomplete="current-password" aria-label="Passcode" style="min-height:48px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font-size:16px">
+      <p id="lock-err" hidden>That passcode does not match.</p>
+      <button id="lock-go" class="btn">Unlock</button>
+      <div id="lock-others" class="list"></div>
     </div>
   </div>
 

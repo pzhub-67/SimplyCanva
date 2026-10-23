@@ -1,5 +1,6 @@
 // Saved designs live in IndexedDB (far bigger than localStorage's ~5MB). `meta` is small so the home screen lists fast.
 // shortcut: if IndexedDB is unavailable (private mode), designs live in memory for this visit only.
+import { dbName, current, scope } from './accounts';
 import type { Design } from './model';
 
 export interface Meta { id: string; title: string; updated: number; thumb: string; w: number; h: number }
@@ -9,7 +10,7 @@ let dbp: Promise<IDBDatabase | null> | null = null;
 
 const open = () => (dbp ??= new Promise<IDBDatabase | null>(res => {
   try {
-    const rq = indexedDB.open('canva-lite', 1);
+    const rq = indexedDB.open(dbName(), 1);
     rq.onupgradeneeded = () => { rq.result.createObjectStore('designs', { keyPath: 'id' }); rq.result.createObjectStore('meta', { keyPath: 'id' }); };
     rq.onsuccess = () => res(rq.result);
     rq.onerror = rq.onblocked = () => res(null);
@@ -55,8 +56,10 @@ export const renameDesign = async (id: string, title: string) => {
 
 // One-time move of the old single-slot save into the new store.
 const OLD = 'canva-lite:design';
+// (only the first profile ever had the old single-slot save)
 export const migrateOld = async (thumb: string) => {
   try {
+    if (current().id !== 'local') return;
     const raw = localStorage.getItem(OLD);
     if (!raw) return;
     const d = JSON.parse(raw) as Design;
@@ -66,6 +69,19 @@ export const migrateOld = async (thumb: string) => {
   } catch { /* leave it in place; nothing is lost */ }
 };
 
-const LAST = 'canva-lite:last';
-export const lastId = () => { try { return localStorage.getItem(LAST); } catch { return null; } };
-export const setLastId = (id: string) => { try { localStorage.setItem(LAST, id); } catch { /* storage blocked */ } };
+const LAST = () => scope('canva-lite:last');
+export const lastId = () => { try { return localStorage.getItem(LAST()); } catch { return null; } };
+export const setLastId = (id: string) => { try { localStorage.setItem(LAST(), id); } catch { /* storage blocked */ } };
+
+// Everything in this profile's database, for backups.
+export const allDesigns = async (): Promise<Design[]> => {
+  const db = await open();
+  if (!db) return [...mem.values()].map(v => v.design);
+  return req<Design[]>(db.transaction('designs').objectStore('designs').getAll());
+};
+export const restoreDesigns = async (designs: Design[]) => {
+  for (const d of designs) {
+    const p = d.pages[0];
+    await putDesign(d, { id: d.id, title: d.title, updated: Date.now(), thumb: p.thumb ?? '', w: p.width, h: p.height });
+  }
+};

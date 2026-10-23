@@ -5,10 +5,11 @@ import { ICONS, svg } from './icons';
 import { Design, FabricJSON, Page, fabricToPage, newDesign, pageToFabric } from './model';
 import { SHAPES } from './shapes';
 import { SIZES } from './sizes';
+import { addProfile, canHash, current, deleteProfile, lockNow, needsUnlock, profiles, renameProfile, scope, setPasscode, switchTo, tryUnlock } from './accounts';
 import { addBrand, loadBrand, removeBrand } from './brand';
 import { dataUrlBytes, makePdf } from './pdf';
 import { TEMPLATES, templatePage } from './templates';
-import { deleteDesign, getDesign, lastId, listMeta, migrateOld, putDesign, renameDesign, setLastId } from './store';
+import { allDesigns, deleteDesign, getDesign, lastId, listMeta, migrateOld, putDesign, renameDesign, restoreDesigns, setLastId } from './store';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const all = <T extends HTMLElement = HTMLElement>(sel: string) => [...document.querySelectorAll<T>(sel)];
@@ -741,7 +742,83 @@ const renderBrand = () => {
 };
 $('brand-add').onclick = () => { addBrand($<HTMLInputElement>('brand-color').value); renderBrand(); };
 
+// --- local profiles ----------------------------------------------------------------
+const me = current();
+const askPasscode = () => new Promise<void>(res => {
+  $('lock-name').textContent = me.name; $('lock').hidden = false;
+  const go = async () => { if (await tryUnlock($<HTMLInputElement>('lock-pass').value)) { $('lock').hidden = true; res(); } else $('lock-err').hidden = false; };
+  $('lock-go').onclick = () => void go();
+  $('lock-pass').onkeydown = e => { if (e.key === 'Enter') void go(); };
+  $('lock-others').replaceChildren(...profiles().filter(p => p.id !== me.id).map(p => Object.assign(document.createElement('button'), { className: 'opt', textContent: `Use ${p.name} instead`, onclick: () => switchTo(p.id) })));
+});
+const renderAccounts = () => {
+  $('acct-list').replaceChildren(...profiles().map(p => {
+    const b = document.createElement('button');
+    b.className = 'opt'; b.setAttribute('aria-pressed', String(p.id === me.id));
+    b.innerHTML = `<span><b></b><small>${p.id === me.id ? 'Open now' : 'Tap to switch'}${p.hash ? ' · has a passcode' : ''}</small></span>`;
+    b.querySelector('b')!.textContent = p.name;
+    b.onclick = () => { if (p.id !== me.id) { if (live) void save(); switchTo(p.id); } };
+    return b;
+  }));
+  $<HTMLInputElement>('acct-rename').value = me.name;
+  $('acct-btn').textContent = me.name;
+  $('acct-nopass').hidden = !me.hash;
+  $('acct-lock').hidden = !me.hash;
+};
+const needHash = () => { if (canHash()) return true; toast('Passcodes need a secure (https) page.'); return false; };
+$('acct-btn').onclick = () => { renderAccounts(); $('accounts').hidden = false; };
+$('acct-add').onclick = async () => {
+  const name = $<HTMLInputElement>('acct-name').value, pass = $<HTMLInputElement>('acct-pass').value;
+  if (pass && !needHash()) return;
+  if (live) await save();
+  switchTo(await addProfile(name, pass || undefined));
+};
+$('acct-rename').onchange = () => { renameProfile(me.id, $<HTMLInputElement>('acct-rename').value); location.reload(); };
+$('acct-setpass').onclick = async () => {
+  const v = $<HTMLInputElement>('acct-pass2').value;
+  if (!v) { toast('Type a passcode first.'); return; }
+  if (!needHash()) return;
+  await setPasscode(me.id, v); $<HTMLInputElement>('acct-pass2').value = ''; toast('Passcode set. It will be asked next time you open the editor.'); location.reload();
+};
+$('acct-nopass').onclick = async () => { await setPasscode(me.id, null); toast('Passcode removed'); location.reload(); };
+$('acct-lock').onclick = () => { if (live) void save().then(lockNow); else lockNow(); };
+$('acct-del').onclick = async () => {
+  const b = $('acct-del');
+  if (profiles().length < 2) { toast('Keep at least one profile.'); return; }
+  if (b.textContent !== 'Sure? Deletes all its designs') { b.textContent = 'Sure? Deletes all its designs'; setTimeout(() => { b.textContent = 'Delete profile'; }, 4000); return; }
+  clearTimeout(saveTimer); live = false; // nothing may be saved back into the profile being deleted
+  await deleteProfile(me.id); location.reload();
+};
+// Backup file: designs, looks and brand colors. Works on any device that runs the app.
+$('acct-backup').onclick = async () => {
+  if (live) await save();
+  const presets = (() => { try { return JSON.parse(localStorage.getItem(scope('canva-lite:presets')) ?? '[]'); } catch { return []; } })();
+  const data = { app: 'simplycanva', version: 1, profile: me.name, designs: await allDesigns(), presets, brand: loadBrand() };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  const a = $<HTMLAnchorElement>('acct-dl');
+  a.href = url; a.download = `${me.name.replace(/\W+/g, '-')}-backup.json`;
+  a.hidden = 'claude' in window;
+  $('acct-note').textContent = 'claude' in window
+    ? `Backup built (${data.designs.length} design${data.designs.length === 1 ? '' : 's'}), but this viewer blocks downloads. Open the app on your own computer (see the README) to save backup files.`
+    : `Backup ready: ${data.designs.length} design${data.designs.length === 1 ? '' : 's'}.`;
+};
+$<HTMLInputElement>('acct-restore').onchange = async e => {
+  const f = (e.target as HTMLInputElement).files?.[0];
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (data.app !== 'simplycanva' || !Array.isArray(data.designs)) throw new Error('not a backup');
+    await restoreDesigns(data.designs);
+    const have = (() => { try { return JSON.parse(localStorage.getItem(scope('canva-lite:presets')) ?? '[]') as { id: string }[]; } catch { return []; } })();
+    const merged = [...have, ...(data.presets ?? []).filter((p: { id: string }) => !have.some(h => h.id === p.id))];
+    localStorage.setItem(scope('canva-lite:presets'), JSON.stringify(merged));
+    (data.brand ?? []).forEach((c: string) => addBrand(c));
+    toast(`Restored ${data.designs.length} design${data.designs.length === 1 ? '' : 's'}`); setTimeout(() => location.reload(), 600);
+  } catch { toast('That file is not a SimplyCanva backup.'); }
+};
+
 const showHome = async () => {
+  $('acct-btn').textContent = me.name;
   void renderTemplates();
   $('home-back').hidden = !live;
   $('home').hidden = false;
@@ -853,6 +930,7 @@ const actions: Record<string, () => void> = {
   pasteEdits: () => editor.pasteEdits(images()),
   continue: () => { $('home').hidden = true; },
   closeExport: () => { $('export').hidden = true; },
+  closeAccounts: () => { $('accounts').hidden = true; },
   forward: () => order(1), backward: () => order(-1),
   bold: () => toggle('fontWeight', 'bold'),
   italic: () => toggle('fontStyle', 'italic'),
@@ -887,6 +965,7 @@ ensureFonts([DEFAULT_FONT]);
 syncUI();
 // Open straight into the last design, or a blank square page. Home (and the size picker) is one tap away.
 void (async () => {
+  if (needsUnlock()) await askPasscode();
   await migrateOld('');
   const id = lastId();
   let d = id ? await getDesign(id) : undefined;

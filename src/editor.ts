@@ -1,6 +1,7 @@
 // Photo edit mode: iPhone-style sliders with a live preview that only sticks when you press Done,
 // plus built-in looks and your own saved presets (Lightroom-style, with an Amount slider).
 import { fabric } from 'fabric';
+import { scope } from './accounts';
 import { makeAdjustFilter } from './adjust';
 import { initCropper, renderCropped } from './crop';
 import { ADJ, AdjKey, BUILTIN, PhotoEdit, PhotoStats, Preset, autoAdjust, effective, isEdited, isNeutral } from './photoModel';
@@ -15,7 +16,7 @@ const clone = <T,>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(
 
 // --- user presets ----------------------------------------------------------
 // shortcut: presets live in this browser's localStorage. Sync them to the account when accounts exist.
-const PKEY = 'canva-lite:presets';
+const PKEY = scope('canva-lite:presets');
 let mine: Preset[] = (() => { try { return JSON.parse(localStorage.getItem(PKEY) ?? '[]'); } catch { return []; } })();
 const saveMine = () => { try { localStorage.setItem(PKEY, JSON.stringify(mine)); } catch { /* storage blocked */ } };
 const allPresets = () => BUILTIN.concat(mine);

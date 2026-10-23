@@ -4,6 +4,7 @@ An open-source, mobile-first design editor that runs in the browser (a "Canva Li
 Vite + TypeScript + Fabric.js. No backend: designs are saved in your browser (IndexedDB).
 
 - Photo editing close to iPhone Photos (sliders, preview until Done, hold to compare, crop and straighten) with Lightroom-style presets.
+- Local profiles with an optional passcode and backup files (no sign-in, nothing leaves your device).
 - Pinch zoom, snapping guides, group, lock, align, opacity, corners, shadows, multiple pages, PNG/JPG export.
 
 ```
