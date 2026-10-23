@@ -12,7 +12,9 @@ Built against `canva-feature-reference.md`.
 7. **Zoom and comfortable handles.** Pinch/button zoom and pan are required, and selection handles must stay small, corners only, and shrink with small objects; the outline must hug the object exactly.
 8. **Objects can go beyond the page.** Outside the page they show faded, show in full with handles while selected, and are not in the exported image.
 9. **Home screen is opt-in.** A Home button shows saved designs and new-design sizes; it never blocks opening the editor.
-10. **Collaboration is deprioritized** (Later / optional).
+10. **No asset library, only basic shapes.** No stock photos, icon packs or stickers.
+11. **Local accounts only.** Profiles live on the device; no Google or third-party sign-in, no cloud.
+12. **Collaboration is deprioritized** (Later / optional).
 
 Process rule: any new focus the owner states in chat is added to this list in the same session.
 
@@ -155,15 +157,15 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 - Magic Resize: re-flow rules per target size (scale + anchor by object role: background, headline, logo)
 - Brand Kit: logos, colors, fonts, one-click apply; photo presets can be part of a brand kit
 
-## Phase 4: Asset library (M4)
-- Uploads with validation and size limits, stored in S3/R2
-- Stock search: Unsplash and Pexels APIs; icons from open sets (Lucide, Tabler)
-- Elements: shapes, lines, frames, grids, stickers, simple charts
-- Custom font upload (woff2)
-- Licensing metadata on every asset; background remover (`@imgly/background-removal`, client-side)
+## Phase 4: Basic shapes only (M4)
+Owner decision: no stock or asset library. Just basic shapes.
+- Done: 12 basic shapes (rectangle, rounded, circle, triangle, diamond, pentagon, hexagon, star, heart, arrow, plus, line), all fully editable with Color, Style, Align and handles (`src/shapes.ts`); smoke18
+- Later, only if asked: more shapes (speech bubble, ring, chevron), line with arrowheads, frames that crop a photo
+- Dropped: stock search, icon sets, stickers, background remover, S3 uploads
 
 ## Phase 5: Export, accounts, sharing (M5)
-- Auth (Supabase or Lucia), Postgres for users/designs, folders, trash
+Owner decision: accounts are local to the device (profiles in the browser, optional passcode, file backup). No Google or other sign-in.
+- Cloud accounts (Supabase or Lucia, Postgres): dropped unless the owner asks
 - Share by link: view-only and "make a copy" (no live co-editing)
 - Export pipeline: server render for large PDFs; GIF and MP4 of simple page sequences
 - One-page website publish (static HTML from a design)
@@ -193,4 +195,4 @@ Modeled on iPhone Photos for simplicity and Lightroom for presets.
 5. **AI:** optional and off by default, so the core stays free of API costs.
 
 ## Next step
-Phases 1 and 2 and a starter of Phase 3 are built and live; everything runs in the browser with no backend. Not started because they need outside services or content: Phase 4 asset library (stock photos, icons, licensing), Phase 5 accounts, cloud sync and sharing (needs a backend), Phase 6 AI, presentations mode and video. Good next code-only steps: snapping while resizing, user-saved templates, brand fonts and logos, template categories and search, Magic Resize, preset import/export as text, before/after split, CPU fallback for photo edits, and a real-phone pass over touch behavior.
+Phases 1 and 2 and a starter of Phase 3 are built and live; everything runs in the browser with no backend. Dropped by the owner: the asset library (only basic shapes) and cloud accounts (local accounts instead). Not started because they need a backend: sharing by link. Phase 6 AI, presentations mode and video. Good next code-only steps: snapping while resizing, user-saved templates, brand fonts and logos, template categories and search, Magic Resize, preset import/export as text, before/after split, CPU fallback for photo edits, and a real-phone pass over touch behavior.

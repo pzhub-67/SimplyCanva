@@ -3,6 +3,7 @@ import { PhotoImage, initEditor } from './editor';
 import { FONTS, loadFont } from './fonts';
 import { ICONS, svg } from './icons';
 import { Design, FabricJSON, Page, fabricToPage, newDesign, pageToFabric } from './model';
+import { SHAPES } from './shapes';
 import { SIZES } from './sizes';
 import { addBrand, loadBrand, removeBrand } from './brand';
 import { dataUrlBytes, makePdf } from './pdf';
@@ -36,6 +37,8 @@ let logical = { w: 1080, h: 1080 };
 let design: Design = newDesign(logical.w, logical.h);
 let live = false; // true once a design is open; autosave stays off until then so it can't overwrite the saved one
 
+$('shape-grid').innerHTML = SHAPES.map(s => `<button class="opt" data-add="${s.id}"><span data-icon="shape-${s.id}"></span>${s.label}</button>`).join('');
+SHAPES.forEach(s => { ICONS[`shape-${s.id}`] = s.icon; });
 all('[data-icon]').forEach(el => { el.innerHTML = svg(ICONS[el.dataset.icon!]); });
 
 // --- zoom, pan, fit -------------------------------------------------------
@@ -349,10 +352,9 @@ const addText = async (kind: keyof typeof TEXT) => {
 };
 
 const addShape = (kind: string) => {
-  const s = Math.round(logical.w * 0.3);
-  const o: fabric.Object = kind === 'circle' ? new fabric.Circle({ radius: s / 2 })
-    : kind === 'triangle' ? new fabric.Triangle({ width: s, height: s })
-    : new fabric.Rect({ width: s, height: Math.round(s * 0.7) });
+  const def = SHAPES.find(x => x.id === kind);
+  if (!def) return;
+  const o = def.make(Math.round(logical.w * 0.3));
   o.set({ fill: ACCENT });
   place(o);
 };
