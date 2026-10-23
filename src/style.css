@@ -1,9 +1,0 @@
-body { margin: 0; font: 14px system-ui; background: #eef0f3; }
-[hidden] { display: none !important; }
-#bar, #textbar { display: flex; gap: 6px; padding: 8px; background: #fff; flex-wrap: wrap; align-items: center; }
-#bar { box-shadow: 0 1px 4px #0002; }
-#textbar { border-top: 1px solid #e5e7eb; box-shadow: 0 1px 4px #0002; }
-button, select, input[type=number] { padding: 6px 10px; cursor: pointer; }
-input[type=number] { width: 64px; cursor: text; }
-#wrap { display: flex; justify-content: safe center; padding: 20px; overflow: auto; }
-.canvas-container { box-shadow: 0 2px 12px #0003; background: #fff; }

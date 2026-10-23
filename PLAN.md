@@ -50,9 +50,8 @@ BrandKit { id, logos[], colors[], fonts[] }
 ## Phase 1: Editor core and usability (M1)
 - Done: add text/shapes/images, layer order, undo/redo, size presets, PNG export, local save
 - Done: Vite + TypeScript, `Design`/`Page` model (`src/model.ts`), font picker, size, bold/italic/underline, alignment
-- Next: layout shell: top bar, left sidebar tabs, contextual toolbar, start screen
-- Next: autosave, drag-drop and paste images, zoom to fit and pinch/scroll zoom
-- Next: snapping and alignment guides, group/ungroup, lock, duplicate, keyboard shortcuts
+- Done: mobile-first shell (top bar, bottom tabs and sheets, contextual toolbar, start screen), autosave, zoom to fit, drag-drop and paste images, photo downscale on import, duplicate, keyboard shortcuts, light/dark theme
+- Next: pinch zoom and pan, snapping and alignment guides, group/ungroup, lock
 - Next: multi-page (page strip), opacity, flip, corner radius, shadows, gradients
 - Next: export JPG, SVG, PDF
 
