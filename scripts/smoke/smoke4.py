@@ -39,7 +39,7 @@ with sync_playwright() as p:
     r2 = img(pg); print('after rotate', r2)
     # 3) cancel after a new crop
     edit(pg); pg.click('[data-ed-tab="crop"]'); pg.wait_for_timeout(400)
-    pg.click('#ratios .chip:has-text("16:9")'); pg.click('[data-ed-tab="adjust"]'); pg.wait_for_timeout(600)
+    pg.click('#ratios .chip:has-text("16:9")'); pg.click('[data-ed-tab="light"]'); pg.wait_for_timeout(600)
     print('mid-session baked', img(pg) if False else 'skipped')
     pg.click('#ed-cancel'); pg.wait_for_timeout(700)
     r3 = img(pg); print('after cancel (should equal rotate result)', r3 == r2, r3)

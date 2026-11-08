@@ -4,7 +4,7 @@ from playwright.sync_api import sync_playwright
 errs=[]
 with sync_playwright() as p:
     b=p.chromium.launch(args=['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist'])
-    ctx=b.new_context(viewport={'width':390,'height':844},device_scale_factor=2,has_touch=True)
+    ctx=b.new_context(viewport={'width':390,'height':844},device_scale_factor=2,has_touch=True,accept_downloads=True)
     pg=ctx.new_page(); pg.on('pageerror',lambda e:errs.append(str(e)))
     pg.on('console',lambda m:errs.append(m.text) if m.type=='error' else None)
     pg.goto('file:///home/claude/canva-lite/dist/artifact.html'); pg.wait_for_timeout(800)
@@ -27,8 +27,9 @@ with sync_playwright() as p:
     pg.click('[data-act="home"]'); pg.click('#acct-btn'); pg.locator('#acct-list .opt').nth(0).click(); pg.wait_for_timeout(2000)
     print('back in Me designs', cards(), pg.inner_text('#acct-btn'))
     # backup of Me
-    pg.click('#acct-btn'); pg.click('#acct-backup'); pg.wait_for_timeout(1000)
-    data=pg.evaluate("fetch(document.getElementById('acct-dl').href).then(r=>r.text())")
+    pg.click('#acct-btn')
+    with pg.expect_download() as dl: pg.click('#acct-backup')
+    data=open(dl.value.path()).read(); print('backup note', pg.inner_text('#acct-note'))
     d=json.loads(data); print('backup designs', len(d['designs']), d['app'])
     open('/tmp/claude-0/backup.json','w').write(data)
     # restore into Work (switch, unlock already flagged in session)

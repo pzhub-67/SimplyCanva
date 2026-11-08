@@ -3,7 +3,8 @@
 An open-source, mobile-first design editor that runs in the browser (a "SimplyCanva").
 Vite + TypeScript + Fabric.js. No backend: designs are saved in your browser (IndexedDB).
 
-- Photo editing close to iPhone Photos (sliders, preview until Done, hold to compare, crop and straighten) with Lightroom-style presets.
+- Photo editing laid out like Lightroom: Light (with tone curve and histogram), Color (mixer and color grading, black & white), Effects, Detail, Crop and straighten, preview until Done, hold to compare.
+- Lightroom presets: import `.xmp`, old `.lrtemplate` or a `.zip` pack; save your own looks and export them as `.xmp` (in a `.zip`) that Lightroom can import.
 - Local profiles with an optional passcode and backup files (no sign-in, nothing leaves your device).
 - Pinch zoom, snapping guides, group, lock, align, opacity, corners, shadows, multiple pages, PNG/JPG export.
 

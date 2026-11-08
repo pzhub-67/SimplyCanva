@@ -8,6 +8,7 @@ import { SIZES } from './sizes';
 import { MIN_PASS, addProfile, current, deleteProfile, lockNow, needsUnlock, noteFail, profiles, renameProfile, switchTo, tryUnlock, waitMs } from './accounts';
 import { changePasscode } from './protect';
 import { loadUiFont } from './uifont';
+import { saveFile } from './download';
 import { canCrypto } from './vault';
 import { addBrand, initBrand, loadBrand, removeBrand } from './brand';
 import { dataUrlBytes, makePdf } from './pdf';
@@ -809,13 +810,10 @@ $('acct-backup').onclick = async () => {
   if (live) await save();
   const presets = getPresets();
   const data = { app: 'simplycanva', version: 1, profile: me.name, designs: await allDesigns(), presets, brand: loadBrand() };
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
-  const a = $<HTMLAnchorElement>('acct-dl');
-  a.href = url; a.download = `${me.name.replace(/\W+/g, '-')}-backup.json`;
-  a.hidden = 'claude' in window;
-  $('acct-note').textContent = 'claude' in window
-    ? `Backup built (${data.designs.length} design${data.designs.length === 1 ? '' : 's'}), but this viewer blocks downloads. Open the app on your own computer (see the README) to save backup files.`
-    : `Backup ready: ${data.designs.length} design${data.designs.length === 1 ? '' : 's'}.`;
+  const n = data.designs.length;
+  const r = await saveFile(`${me.name.replace(/\W+/g, '-')}-backup.json`, new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  $('acct-note').textContent = r === 'saved' ? `Backup saved: ${n} design${n === 1 ? '' : 's'}. It is not encrypted, so keep it somewhere private.`
+    : r === 'declined' ? 'Backup not saved.' : 'Saving files is not available in this view.';
 };
 $<HTMLInputElement>('acct-restore').onchange = async e => {
   const f = (e.target as HTMLInputElement).files?.[0];
@@ -884,7 +882,7 @@ const pageSvg = () => {
   try { return c.toSVG({ viewBox: { x: 0, y: 0, width: logical.w, height: logical.h }, width: logical.w, height: logical.h }); } finally { exporting = false; }
 };
 const exportPNG = async () => {
-  const dl = $<HTMLAnchorElement>('export-dl'), img = $<HTMLImageElement>('export-img');
+  const dl = $('export-dl'), img = $<HTMLImageElement>('export-img');
   all('[data-fmt]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fmt === fmt)));
   $('export-all').hidden = design.pages.length < 2 || fmt === 'pdf' || fmt === 'svg';
   $('export-more').replaceChildren();
@@ -893,21 +891,29 @@ const exportPNG = async () => {
     : fmt === 'svg' ? 'SVG of the current page. Photos are embedded.' : 'On a phone, press and hold the image to save it to your photos.';
   $('export').hidden = false;
   commitPage();
-  dl.hidden = 'claude' in window; // embedded artifact viewers block downloads; press-and-hold on the image still works
+  const name = (design.title || 'design').replace(/[^\w\- ]+/g, '').trim() || 'design';
   if (fmt === 'svg') {
     svgText = pageSvg();
     img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
-    dl.href = img.src; dl.download = 'design.svg'; dl.textContent = 'Download SVG';
+    pending = { name: `${name}.svg`, blob: new Blob([svgText], { type: 'image/svg+xml' }) }; dl.textContent = 'Save SVG';
   } else if (fmt === 'pdf') {
     const shots = await Promise.all(design.pages.map((pg, i) => i === pageIdx ? Promise.resolve(pageImage('jpeg', logical.w, 0.92)) : renderPage(pg, logical.w, 'jpeg', 0.92)));
     img.src = shots[pageIdx];
-    const blob = new Blob([makePdf(shots.map(s => ({ jpeg: dataUrlBytes(s), w: logical.w, h: logical.h }))) as BlobPart], { type: 'application/pdf' });
-    dl.href = URL.createObjectURL(blob); dl.download = 'design.pdf'; dl.textContent = 'Download PDF';
+    pending = { name: `${name}.pdf`, blob: new Blob([makePdf(shots.map(s => ({ jpeg: dataUrlBytes(s), w: logical.w, h: logical.h }))) as BlobPart], { type: 'application/pdf' }) };
+    dl.textContent = 'Save PDF';
   } else {
     const url = pageImage(fmt, logical.w, 0.92);
-    img.src = url; dl.href = url; dl.download = fmt === 'png' ? 'design.png' : 'design.jpg';
-    dl.textContent = fmt === 'png' ? 'Download PNG' : 'Download JPG';
+    img.src = url;
+    pending = { name: `${name}.${fmt === 'png' ? 'png' : 'jpg'}`, blob: new Blob([dataUrlBytes(url) as BlobPart], { type: `image/${fmt}` }) };
+    dl.textContent = fmt === 'png' ? 'Save PNG' : 'Save JPG';
   }
+};
+let pending: { name: string; blob: Blob } | null = null;
+$('export-dl').onclick = async e => {
+  e.preventDefault();
+  if (!pending) return;
+  const r = await saveFile(pending.name, pending.blob);
+  if (r === 'unavailable') toast('Saving files is not available here. Press and hold the image to save it.');
 };
 all('[data-fmt]').forEach(b => { b.onclick = () => { fmt = b.dataset.fmt as Fmt; void exportPNG(); }; });
 $('export-copy').onclick = () => {

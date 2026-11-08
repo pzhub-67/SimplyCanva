@@ -4,7 +4,7 @@ from playwright.sync_api import sync_playwright
 errs=[]
 with sync_playwright() as p:
     b=p.chromium.launch(args=['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist'])
-    ctx=b.new_context(viewport={'width':390,'height':844},device_scale_factor=2,has_touch=True)
+    ctx=b.new_context(viewport={'width':390,'height':844},device_scale_factor=2,has_touch=True,accept_downloads=True)
     pg=ctx.new_page(); pg.on('pageerror',lambda e:errs.append(str(e)))
     pg.goto('file:///home/claude/canva-lite/dist/artifact.html'); pg.wait_for_timeout(800)
     pg.set_input_files('#img', files=['/tmp/claude-0/test.png']); pg.wait_for_timeout(900)
@@ -17,9 +17,9 @@ with sync_playwright() as p:
       return {corner:px(3,3),center:px(150,150),svgStart:i.src.slice(0,30)}})()""")
     print('svg', r)
     pg.click('[data-fmt="pdf"]'); pg.wait_for_timeout(1500)
-    href=pg.evaluate("document.getElementById('export-dl').href")
-    data=pg.evaluate("fetch(document.getElementById('export-dl').href).then(r=>r.arrayBuffer()).then(b=>Array.from(new Uint8Array(b)))")
-    open('/tmp/claude-0/out.pdf','wb').write(bytes(data))
+    with pg.expect_download() as d: pg.click('#export-dl')
+    data=open(d.value.path(),'rb').read(); print('pdf name', d.value.suggested_filename, data[:5])
+    open('/tmp/claude-0/out.pdf','wb').write(data)
     print('pdf bytes', len(data), pg.inner_text('#export-note'))
     b.close()
 print('errors',errs)

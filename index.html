@@ -205,9 +205,32 @@
   .ed-head .tool { flex: 1; font-size: 14px; }
   #ed-compare { background: var(--raised); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   .ed-head .btn { flex: 1; }
-  .ed-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; border-bottom: 1px solid var(--rule); }
-  .ed-tabs .tool { min-height: 40px; font-size: 14px; color: var(--muted); border-radius: 0; }
-  .ed-tabs .tool[aria-pressed="true"] { background: none; color: var(--ink); border-bottom: 2px solid var(--accent); }
+  .ed-tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; border-top: 1px solid var(--rule); }
+  .ed-tabs .tool { min-width: 0; min-height: 44px; padding: 4px 2px; font-size: 13px; color: var(--muted); border-radius: 0; }
+  .ed-tabs .tool[aria-pressed="true"] { background: none; color: var(--ink); border-top: 2px solid var(--accent); }
+  .ed-body { height: min(40vh, 340px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
+  .ed-body > div { display: flex; flex-direction: column; gap: 6px; }
+  .ed-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ed-row select { flex: 1; min-width: 0; }
+  .file-btn { position: relative; overflow: hidden; }
+  .file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .sliders { display: flex; flex-direction: column; }
+  .sliders .slide { min-height: 42px; }
+  .slide.changed .slide-name { color: var(--accent); }
+  .slide-name { cursor: pointer; user-select: none; }
+  .ed-sub { margin: 10px 0 2px; font: 600 14px var(--font-ui); }
+  .dots { display: flex; gap: 8px; flex-wrap: wrap; }
+  .dots button { width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent; outline: 1px solid rgb(0 0 0 / .12); outline-offset: -1px; cursor: pointer; padding: 0; position: relative; }
+  .dots button[aria-pressed="true"] { border-color: var(--surface); box-shadow: 0 0 0 2px var(--ink); }
+  .dots button.changed::after { content: ""; position: absolute; right: -2px; top: -2px; width: 8px; height: 8px; border-radius: 50%; background: var(--ink); border: 2px solid var(--surface); }
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .seg .chip { padding: 8px 4px; text-align: center; }
+  .hue input[type=range] { accent-color: var(--ink); background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); border-radius: 999px; height: 10px; appearance: none; -webkit-appearance: none; }
+  .hue input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); }
+  .hue input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); }
+  #curve-box { display: flex; flex-direction: column; gap: 6px; }
+  #curve { width: min(100%, 300px); aspect-ratio: 1; align-self: center; touch-action: none; border-radius: var(--radius-control); background: var(--well); cursor: crosshair; }
+  #filters .chip.th { min-width: 76px; }
   #crop { position: absolute; inset: 0; z-index: 4; background: var(--well); }
   #crop canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   .dial { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0; scrollbar-width: none; }
@@ -245,9 +268,13 @@
     #tabs .tool[aria-pressed="true"]::before { top: 18px; bottom: 18px; left: -8px; right: auto; width: 2px; height: auto; }
     #stage { grid-area: stage; margin: 0 8px 8px 0; border-radius: var(--radius-sheet); border: 1px solid var(--border); }
     .sheet { left: 12px; top: 60px; bottom: auto; right: auto; width: 360px; max-height: calc(100% - 72px); }
-    body[data-editing] { grid-template: "stage" 1fr "editor" auto / 1fr; }
-    body[data-editing] #stage { margin: 8px 8px 0; }
-    #editor { grid-area: editor; width: min(100%, 760px); justify-self: center; box-sizing: border-box; border-top: 0; background: none; }
+    body[data-editing] { grid-template: "stage editor" 1fr / 1fr 400px; }
+    body[data-editing] #stage { margin: 8px 0 8px 8px; }
+    #editor { grid-area: editor; min-height: 0; box-sizing: border-box; border-top: 0; background: none; padding: 8px 12px; }
+    body[data-editing] .ed-body { height: auto; flex: 1; min-height: 0; }
+    .ed-head { order: -2; }
+    .ed-tabs { order: -1; border-top: 0; border-bottom: 1px solid var(--rule); }
+    .ed-tabs .tool[aria-pressed="true"] { border-top: 0; border-bottom: 2px solid var(--accent); }
     .home-in { padding-inline: 24px; box-sizing: border-box; }
   }
   @media (max-width: 959px) { .home-in { padding-inline: 16px; box-sizing: border-box; } .overlay.home { padding-inline: 0; } }
@@ -387,29 +414,55 @@
       <button class="tool" id="ed-revert">Revert</button>
       <button class="btn" id="ed-done">Done</button>
     </div>
-    <div class="ed-tabs">
-      <button class="tool" data-ed-tab="adjust" aria-pressed="true">Adjust</button>
-      <button class="tool" data-ed-tab="filters" aria-pressed="false">Filters</button>
-      <button class="tool" data-ed-tab="mine" aria-pressed="false">Mine</button>
-      <button class="tool" data-ed-tab="crop" aria-pressed="false">Crop</button>
-    </div>
-    <div data-ed-panel="adjust">
-      <div id="dial" class="dial"></div>
-      <div class="slide">
-        <span id="adj-name" class="slide-name"></span>
-        <input id="adj-range" type="range" min="-100" max="100" step="1" value="0" aria-label="Amount">
-        <output id="adj-val"></output>
-        <button class="tool" id="adj-reset">Reset</button>
+    <div class="ed-body">
+    <div data-ed-panel="presets" hidden>
+      <div class="ed-row">
+        <select id="pgroup" aria-label="Preset group"></select>
+        <label class="btn quiet file-btn">Import<input id="pimport" type="file" accept=".xmp,.lrtemplate,.zip,application/zip" multiple aria-label="Import Lightroom presets (.xmp, .lrtemplate or .zip)"></label>
+        <button class="btn quiet" id="pmanage-btn" aria-expanded="false">Manage</button>
+      </div>
+      <div id="filters" class="dial"></div>
+      <div class="slide" id="amount" hidden>
+        <span class="slide-name">Amount</span>
+        <input id="amt-range" type="range" min="0" max="200" step="1" value="100" aria-label="Preset amount">
+        <output id="amt-val"></output>
+      </div>
+      <div id="pmanage" hidden>
+        <div class="prow">
+          <input id="preset-name" type="text" placeholder="Name this look" aria-label="Preset name" maxlength="60">
+          <button class="btn" id="save-preset">Save look</button>
+        </div>
+        <div id="mine" class="prows"></div>
+        <div class="ed-row"><button class="btn quiet" id="pexport-all">Export my presets (.zip of .xmp)</button></div>
+        <p class="muted" id="pnote">Imports Lightroom presets: .xmp files, old .lrtemplate files, or a .zip pack. Exports .xmp files Lightroom can import.</p>
       </div>
     </div>
-    <div data-ed-panel="filters" hidden><div id="filters" class="dial"></div></div>
-    <div data-ed-panel="mine" hidden>
-      <div id="mine" class="prows"></div>
-      <div class="prow">
-        <input id="preset-name" type="text" placeholder="Name this look" aria-label="Preset name" maxlength="40">
-        <button class="btn" id="save-preset">Save current look</button>
+    <div data-ed-panel="light" hidden>
+      <div class="ed-row">
+        <button class="chip" id="ed-auto">Auto</button>
+        <button class="chip" id="curve-btn" aria-pressed="false">Curve</button>
       </div>
+      <div id="curve-box" hidden>
+        <div class="ed-row" id="curve-ch">
+          <button class="chip" data-ch="rgb">RGB</button><button class="chip" data-ch="r">Red</button><button class="chip" data-ch="g">Green</button><button class="chip" data-ch="b">Blue</button>
+          <button class="tool" id="curve-reset">Reset</button>
+        </div>
+        <canvas id="curve" width="300" height="300" aria-label="Tone curve. Tap to add a point, drag to move it, drag it off or double-tap to remove it."></canvas>
+      </div>
+      <div class="sliders" data-sliders="light"></div>
     </div>
+    <div data-ed-panel="color" hidden>
+      <div class="ed-row"><button class="chip" id="ed-mono" aria-pressed="false">Black &amp; white</button></div>
+      <div class="sliders" data-sliders="color"></div>
+      <h3 class="ed-sub">Mixer</h3>
+      <div class="dots" id="bands"></div>
+      <div class="sliders" id="mix-sliders"></div>
+      <h3 class="ed-sub">Grading</h3>
+      <div class="seg" id="ranges"></div>
+      <div class="sliders" id="grade-sliders"></div>
+    </div>
+    <div data-ed-panel="effects" hidden><div class="sliders" data-sliders="effects"></div></div>
+    <div data-ed-panel="detail" hidden><div class="sliders" data-sliders="detail"></div></div>
     <div data-ed-panel="crop" hidden>
       <div id="ratios" class="dial"></div>
       <div class="dial">
@@ -424,10 +477,14 @@
         <button class="tool" id="crop-reset">Reset</button>
       </div>
     </div>
-    <div id="amount" class="slide" hidden>
-      <span class="slide-name">Amount</span>
-      <input id="amt-range" type="range" min="0" max="100" step="1" value="100" aria-label="Preset amount">
-      <output id="amt-val"></output>
+    </div>
+    <div class="ed-tabs">
+      <button class="tool" data-ed-tab="presets" aria-pressed="false">Presets</button>
+      <button class="tool" data-ed-tab="crop" aria-pressed="false">Crop</button>
+      <button class="tool" data-ed-tab="light" aria-pressed="true">Light</button>
+      <button class="tool" data-ed-tab="color" aria-pressed="false">Color</button>
+      <button class="tool" data-ed-tab="effects" aria-pressed="false">Effects</button>
+      <button class="tool" data-ed-tab="detail" aria-pressed="false">Detail</button>
     </div>
   </section>
   <input id="img" type="file" accept="image/*" multiple hidden>
@@ -473,8 +530,7 @@
       <div class="row"><button id="acct-lock" class="btn quiet">Lock now</button><button id="acct-del" class="btn quiet">Delete profile</button></div>
       <h2>Backup</h2>
       <p>A backup file moves this profile to another device or browser.</p>
-      <div class="row"><button id="acct-backup" class="btn quiet">Back up this profile</button><label class="btn quiet">Restore<input id="acct-restore" type="file" accept=".json,application/json" hidden></label></div>
-      <a id="acct-dl" class="btn" download hidden>Download backup</a>
+      <div class="row"><button id="acct-backup" class="btn quiet">Save a backup file</button><label class="btn quiet">Restore<input id="acct-restore" type="file" accept=".json,application/json" hidden></label></div>
       <p id="acct-note" class="muted"></p>
       <button class="btn" data-act="closeAccounts">Done</button>
     </div>
@@ -501,7 +557,7 @@
       <p id="export-note">On a phone, press and hold the image to save it to your photos.</p>
       <button id="export-copy" class="btn quiet" hidden>Copy SVG code</button>
       <div class="row">
-        <a id="export-dl" class="btn" download="design.png">Download PNG</a>
+        <button id="export-dl" class="btn">Save PNG</button>
         <button class="btn quiet" data-act="closeExport">Close</button>
       </div>
     </div>

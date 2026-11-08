@@ -1,0 +1,60 @@
+# Lightroom-style photo editor: tabs, sliders, curve, mixer, grading, XMP import and .zip export.
+import io, zipfile
+from playwright.sync_api import sync_playwright
+errs = []
+FIX = '/home/claude/canva-lite/scripts/smoke/fixtures/golden-moody.xmp'
+def px(pg):  # colour of the photo's centre on screen
+    return pg.evaluate("""() => { const c = document.querySelector('canvas.lower-canvas'); const g = c.getContext('2d'); const d = g.getImageData(c.width*0.35|0, c.height*0.45|0, 1, 1).data; return [d[0], d[1], d[2]]; }""")
+with sync_playwright() as p:
+    b = p.chromium.launch(args=['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'])
+    ctx = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, has_touch=True, accept_downloads=True)
+    pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append('PAGEERR ' + str(e)))
+    pg.on('console', lambda m: errs.append(m.text) if m.type == 'error' else None)
+    pg.goto('file:///home/claude/canva-lite/dist/artifact.html'); pg.wait_for_timeout(800)
+    pg.set_input_files('#img', files=['/tmp/claude-0/test.png']); pg.wait_for_timeout(900)
+    pg.click('[data-act="edit"]'); pg.wait_for_timeout(400)
+    base = px(pg)
+    print('tabs', pg.locator('[data-ed-tab]').all_inner_texts(), 'light sliders', pg.locator('[data-sliders="light"] .slide').count())
+    pg.locator('[data-sliders="light"] input[aria-label="Exposure"]').fill('60'); pg.wait_for_timeout(800)
+    brighter = px(pg); print('exposure brightens', sum(brighter) > sum(base), base, brighter)
+    pg.click('#curve-btn'); pg.wait_for_timeout(200)
+    box = pg.locator('#curve').bounding_box()
+    pg.mouse.move(box['x'] + box['width'] * .5, box['y'] + box['height'] * .5); pg.mouse.down()
+    pg.mouse.move(box['x'] + box['width'] * .5, box['y'] + box['height'] * .25, steps=5); pg.mouse.up(); pg.wait_for_timeout(300)
+    print('curve marked', pg.locator('#curve-btn.changed').count() == 1)
+    pg.screenshot(path='/tmp/claude-0/e-light.png')
+    pg.click('[data-ed-tab="color"]'); pg.wait_for_timeout(200)
+    pg.click('#bands [data-band="blue"]')
+    pg.locator('#mix-sliders input[aria-label="Saturation"]').fill('-80')
+    pg.click('#ranges [data-range="shadows"]')
+    pg.locator('#grade-sliders input[aria-label="Hue"]').fill('200'); pg.locator('#grade-sliders input[aria-label="Saturation"]').fill('40'); pg.wait_for_timeout(300)
+    print('band + range marked', pg.locator('#bands .changed').count(), pg.locator('#ranges .changed').count())
+    pg.screenshot(path='/tmp/claude-0/e-color.png')
+    pg.click('#ed-mono'); pg.wait_for_timeout(300)
+    r, g, bb = px(pg); print('B&W is grey', max(r, g, bb) - min(r, g, bb) <= 3, [r, g, bb])
+    pg.click('#ed-mono')
+    # presets: import an .xmp, it becomes the chosen look in its own group
+    pg.click('[data-ed-tab="presets"]'); pg.wait_for_timeout(300)
+    print('built-in thumbs', pg.locator('#filters .chip.th').count())
+    pg.set_input_files('#pimport', files=[FIX]); pg.wait_for_timeout(900)
+    print('group', pg.locator('#pgroup').input_value(), 'chips', pg.locator('#filters .chip').all_inner_texts(), 'amount shown', pg.is_visible('#amount'))
+    print('toast', pg.locator('.toast').first.inner_text() if pg.locator('.toast').count() else None)
+    pg.screenshot(path='/tmp/claude-0/e-presets.png')
+    # save the look, then export it as a zip of .xmp
+    pg.click('#pmanage-btn'); pg.fill('#preset-name', 'Smoke look'); pg.click('#save-preset'); pg.wait_for_timeout(300)
+    print('mine rows', pg.locator('#mine .prow').count())
+    with pg.expect_download() as d:
+        pg.click('#pexport-all')
+    data = open(d.value.path(), 'rb').read()
+    z = zipfile.ZipFile(io.BytesIO(data)); names = z.namelist()
+    x = z.read(names[-1]).decode()
+    print('zip', d.value.suggested_filename, names, 'has crs', 'crs:HasSettings="True"' in x, 'curve', 'ToneCurvePV2012' in x)
+    pg.screenshot(path='/tmp/claude-0/e-manage.png')
+    pg.click('#ed-done'); pg.wait_for_timeout(600)
+    saved = pg.evaluate("""() => new Promise(r => { const q = indexedDB.open('canva-lite'); q.onsuccess = () => { const g = q.result.transaction('designs').objectStore('designs').getAll(); g.onsuccess = () => r(g.result[0].pages[0].objects.find(o => o.type === 'image').edit); }; })""")
+    print('saved edit keys', sorted(saved.keys()), saved.get('filter'))
+    # reopen: the edit comes back
+    pg.click('[data-act="edit"]'); pg.wait_for_timeout(400); pg.click('[data-ed-tab="color"]')
+    print('reopen keeps mixer', pg.locator('#bands .changed').count())
+    b.close()
+print('errors', errs)
