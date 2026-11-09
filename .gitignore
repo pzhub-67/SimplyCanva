@@ -1,3 +1,4 @@
 node_modules
 dist
 .taste-skill/
+dist-probe/

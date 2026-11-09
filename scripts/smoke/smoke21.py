@@ -22,21 +22,23 @@ with sync_playwright() as p:
     print('managed presets', pg.locator('#lib-sheet-list .prow').count())
     pg.click('#lib-sheet-close')
     # open the big photo, edit, Done
-    pg.locator('.lcell').nth(0).click(); pg.wait_for_timeout(1500)
-    print('editing, dark', pg.evaluate("getComputedStyle(document.body).backgroundColor"), 'save btn', pg.is_visible('#ed-save'))
-    pg.locator('[data-sliders="light"] input[aria-label="Exposure"]').fill('40'); pg.wait_for_timeout(500)
+    pg.locator('.lcell').nth(0).click(); pg.wait_for_timeout(800); pg.click('#lp-edit'); pg.wait_for_timeout(1500)
+    print('editing, dark', pg.evaluate("getComputedStyle(document.body).backgroundColor"), 'save item', pg.locator('#ed-save').count())
+    pg.locator('[data-sliders="light"] input[aria-label="Exposure"]').fill('0.7'); pg.wait_for_timeout(500)
     pg.click('[data-ed-tab="presets"]'); pg.wait_for_timeout(600)
     pg.select_option('#pgroup', label='Sports Pack (1)'); pg.wait_for_timeout(300)
     pg.locator('#filters .chip', has_text='Golden').click(); pg.wait_for_timeout(500)
     pg.screenshot(path='/tmp/claude-0/l-edit.png')
     try:
-        with pg.expect_download(timeout=8000) as d: pg.click('#ed-save')
+        pg.click('#ed-more')
+        with pg.expect_download(timeout=60000) as d: pg.click('#ed-save')
     except Exception as e:
         print('NO DOWNLOAD', pg.locator('.toast').all_inner_texts(), errs); raise
     im = Image.open(d.value.path()); src = Image.open('/tmp/claude-0/big.jpg')
     mean = lambda i: [round(sum(c) / len(c)) for c in zip(*i.convert('RGB').resize((60, 40)).getdata())]
     print('full size jpg', d.value.suggested_filename, im.size, 'mean before', mean(src), 'after', mean(im))
     pg.click('#ed-done'); pg.wait_for_timeout(1500)
+    print('back in viewer', pg.is_visible('#loupe')); pg.click('#lp-back'); pg.wait_for_timeout(300)
     print('back in library', pg.is_visible('#library'), 'edited dots', pg.locator('.lcell .dot').count())
     # select both: flag, apply a built-in preset, copy/paste
     pg.click('#lib-select'); pg.locator('.lcell').nth(0).click(); pg.locator('.lcell').nth(1).click()
@@ -47,10 +49,11 @@ with sync_playwright() as p:
     print('select mode ended', pg.inner_text('#lib-select'), 'tags', pg.locator('.lcell .ptag').all_inner_texts())
     pg.click('#lib-select'); pg.locator('.lcell').nth(0).click(); pg.locator('.lcell').nth(1).click()
     pg.screenshot(path='/tmp/claude-0/l-grid.png')
-    with pg.expect_download() as d: pg.click('[data-lib-act="save"]')
+    pg.click('[data-lib-act="save"]')
+    with pg.expect_download() as d: pg.click('#lx-go')
     z = zipfile.ZipFile(d.value.path()); print('zip of jpgs', z.namelist())
-    pg.click('[data-lib-filter="picks"]'); print('flagged filter', pg.locator('.lcell').count())
-    pg.click('[data-lib-filter="all"]')
+    pg.click('#lib-filter-btn'); pg.select_option('#lf-flag', 'pick'); print('flagged filter', pg.locator('.lcell').count())
+    pg.select_option('#lf-flag', '')
     pg.click('[data-lib-act="design"]'); pg.wait_for_timeout(2000)
     print('in design, library hidden', not pg.is_visible('#library'))
     # reload: photos, presets and edits persist; the app reopens the library

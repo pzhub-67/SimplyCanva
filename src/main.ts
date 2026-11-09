@@ -302,12 +302,17 @@ const snap = () => {
   pos = hist.length - 1;
   syncHistory(); autosave();
 };
+// Photo edits rebuild their filters after loading (local tone mapping needs the photo itself; older designs carry older edits).
+const reEdit = (objs: fabric.Object[]) => objs.forEach(o => {
+  if (o.type === 'group') reEdit((o as fabric.Group).getObjects());
+  else if (o.type === 'image' && (o as PhotoImage).edit) applyEdit(o as PhotoImage, (o as PhotoImage).edit);
+});
 // Run several canvas changes as one undo step.
 const batch = (fn: () => void) => { busy = true; try { fn(); } finally { busy = false; } snap(); };
 const restore = (i: number) => {
   if (i < 0 || i >= hist.length) return;
   busy = true; pos = i;
-  c.loadFromJSON(hist[i], () => { busy = false; relock(); refit(); syncUI(); syncHistory(); autosave(); });
+  c.loadFromJSON(hist[i], () => { reEdit(c.getObjects()); busy = false; relock(); refit(); syncUI(); syncHistory(); autosave(); });
 };
 const undo = () => restore(pos - 1);
 const redo = () => restore(pos + 1);
@@ -634,6 +639,7 @@ const showPage = (i: number, then?: () => void) => {
   vz = 1; vx = 0; vy = 0;
   busy = true;
   c.loadFromJSON(pageToFabric(page), async () => {
+    reEdit(c.getObjects());
     busy = false; relock(); hist = []; pos = -1;
     fit(); setBg(page.background, false);
     await ensureFonts(page.objects.map(o => o.fontFamily).filter((f): f is string => typeof f === 'string'));
@@ -685,7 +691,7 @@ const renderPage = async (page: Page, outW: number, format: 'png' | 'jpeg', qual
     const k = outW / page.width;
     const sc = new fabric.StaticCanvas(null, { width: outW, height: Math.round(page.height * k), renderOnAddRemove: false });
     sc.setZoom(k);
-    sc.loadFromJSON(pageToFabric(page), () => { sc.renderAll(); const url = sc.toDataURL({ format, quality }); sc.dispose(); res(url); });
+    sc.loadFromJSON(pageToFabric(page), () => { reEdit(sc.getObjects()); sc.renderAll(); const url = sc.toDataURL({ format, quality }); sc.dispose(); res(url); });
   });
 };
 const renderPages = async () => {
@@ -976,6 +982,7 @@ const openPhoto = async (rec: PhotoRec) => {
 const leavePhoto = async (img: PhotoImage, saved: boolean) => {
   const rec = photo!;
   if (saved) {
+    if (JSON.stringify(rec.edit ?? null) !== JSON.stringify(img.edit ?? null)) rec.look = undefined;
     rec.edit = img.edit ? clone(img.edit) : undefined;
     rec.updated = Date.now();
     const el = img.getElement() as unknown as HTMLCanvasElement, k = Math.min(1, THUMB_PX / Math.max(el.width, el.height));
@@ -988,13 +995,13 @@ const leavePhoto = async (img: PhotoImage, saved: boolean) => {
   delete document.body.dataset.photo;
   $('ed-save').hidden = true;
   showPage(pageIdx); // the design that was open, as it was saved
-  await lib.show();
+  await lib.show(rec.id); // back to that photo in the viewer
 };
 $('ed-save').onclick = async () => {
   if (!photo) return;
   toast('Rendering full size…');
   try {
-    const r = await saveFile(`${photo.name.replace(/[^\w\- ]+/g, '').trim() || 'photo'}.jpg`, await exportJpeg(photo, allPresets(), editor.work()));
+    const r = await saveFile(`${photo.name.replace(/[^\w\- ]+/g, '').trim() || 'photo'}.jpg`, await exportJpeg(photo, editor.work()));
     toast(r === 'saved' ? 'Saved.' : r === 'declined' ? 'Not saved.' : 'Saving files is not available here.');
   } catch (e) { console.error('render', e); toast('Could not render that photo.'); }
 };

@@ -1,118 +1,104 @@
-// Photo edits are parameters, never pixels. The source image is untouched, and a PhotoEdit is a few hundred bytes.
-// The model follows Lightroom: Light, Color (with a colour mixer and colour grading), Effects, Detail, and a tone curve,
-// so Lightroom presets (.xmp) can be read into it and written back out (see xmp.ts).
-export const ADJ = [
-  { key: 'exposure', label: 'Exposure', panel: 'light' },
-  { key: 'contrast', label: 'Contrast', panel: 'light' },
-  { key: 'highlights', label: 'Highlights', panel: 'light' },
-  { key: 'shadows', label: 'Shadows', panel: 'light' },
-  { key: 'whites', label: 'Whites', panel: 'light' },
-  { key: 'blacks', label: 'Blacks', panel: 'light' },
-  { key: 'brilliance', label: 'Brilliance', panel: 'light' },
-  { key: 'brightness', label: 'Brightness', panel: 'light' },
-  { key: 'blackPoint', label: 'Black Point', panel: 'light' },
-  { key: 'warmth', label: 'Temp', panel: 'color' },
-  { key: 'tint', label: 'Tint', panel: 'color' },
-  { key: 'vibrance', label: 'Vibrance', panel: 'color' },
-  { key: 'saturation', label: 'Saturation', panel: 'color' },
-  { key: 'texture', label: 'Texture', panel: 'effects' },
-  { key: 'definition', label: 'Clarity', panel: 'effects' },
-  { key: 'dehaze', label: 'Dehaze', panel: 'effects' },
-  { key: 'vignette', label: 'Vignette', panel: 'effects' },
-  { key: 'grain', label: 'Grain', panel: 'effects' },
-  { key: 'sharpness', label: 'Sharpening', panel: 'detail' },
-  { key: 'noiseReduction', label: 'Noise Reduction', panel: 'detail' },
-] as const;
-
-export type AdjKey = (typeof ADJ)[number]['key'];
-export const KEYS: AdjKey[] = ADJ.map(a => a.key);
-export const POSITIVE: AdjKey[] = ['noiseReduction', 'grain']; // these run 0..100, the rest -100..100
-export const minOf = (k: AdjKey) => (POSITIVE.includes(k) ? 0 : -100);
-export type Adj = Record<AdjKey, number>;
-
+// Photo edits are Lightroom develop settings: the same crs: names, ranges and defaults as an .xmp file, so presets
+// import and export without loss and every slider means what it means in Lightroom. Edits are parameters, never pixels.
 import type { CropParams } from './cropMath';
 
-// Tone curve points are [input, output] on 0..255, like Lightroom's point curve.
 export type Pt = [number, number];
-export type Channel = 'rgb' | 'r' | 'g' | 'b';
-export type Curves = Partial<Record<Channel, Pt[]>>;
-export const BANDS = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'purple', 'magenta'] as const;
+export const BANDS = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'] as const;
 export type Band = (typeof BANDS)[number];
-export const BAND_HUE: Record<Band, number> = { red: 0, orange: 30, yellow: 60, green: 120, aqua: 180, blue: 240, purple: 270, magenta: 300 };
-// Colour mixer: per band [hue, saturation, luminance], each -100..100.
-export type Hsl = Partial<Record<Band, [number, number, number]>>;
-// Colour grading: hue 0..360, saturation 0..100, luminance -100..100. Blending 0..100 (default 50), balance -100..100.
-export interface Tone3 { h: number; s: number; l: number }
-export const RANGES = ['shadows', 'midtones', 'highlights', 'global'] as const;
-export type Range = (typeof RANGES)[number];
-export interface Grade extends Partial<Record<Range, Tone3>> { blending?: number; balance?: number }
+export const BAND_HUE: Record<Band, number> = { Red: 0, Orange: 30, Yellow: 60, Green: 120, Aqua: 180, Blue: 240, Purple: 270, Magenta: 300 };
+export const WHEELS = ['Shadow', 'Midtone', 'Highlight', 'Global'] as const;
+export type Wheel = (typeof WHEELS)[number];
+export const CURVES = ['ToneCurvePV2012', 'ToneCurvePV2012Red', 'ToneCurvePV2012Green', 'ToneCurvePV2012Blue'] as const;
+export type CurveKey = (typeof CURVES)[number];
 
-// Everything a look can set. A preset is a named look; an edit is a look plus a chosen preset and a crop.
-export interface Look { adj: Partial<Adj>; hsl?: Hsl; curve?: Curves; grade?: Grade; mono?: boolean }
-export interface PhotoEdit extends Look { filter?: { id: string; amount: number }; crop?: CropParams }
-export interface Preset extends Look { id: string; name: string; group?: string }
-
-export const BUILTIN: Preset[] = [
-  { id: 'vivid', name: 'Vivid', adj: { saturation: 25, vibrance: 30, contrast: 15, definition: 20 } },
-  { id: 'bright', name: 'Bright', adj: { exposure: 25, shadows: 30, brilliance: 20 } },
-  { id: 'warm', name: 'Warm', adj: { warmth: 35, tint: 5, brightness: 5, saturation: 10 } },
-  { id: 'cool', name: 'Cool', adj: { warmth: -35, tint: -5, contrast: 5 } },
-  { id: 'sunset', name: 'Sunset', adj: { warmth: 55, tint: 15, saturation: 25, vignette: 15 } },
-  { id: 'film', name: 'Film', adj: { warmth: 15, blackPoint: -25, saturation: -12, contrast: 10, grain: 25 } },
-  { id: 'fade', name: 'Fade', adj: { blackPoint: -35, contrast: -15, saturation: -20, brightness: 8 } },
-  { id: 'matte', name: 'Matte', adj: { contrast: 10, vibrance: 10 }, curve: { rgb: [[0, 32], [64, 68], [192, 196], [255, 240]] } },
-  { id: 'tealorange', name: 'Teal & Orange', adj: { contrast: 15, vibrance: 10 }, grade: { shadows: { h: 190, s: 35, l: 0 }, highlights: { h: 35, s: 30, l: 0 }, blending: 60 }, hsl: { orange: [5, 15, 5], blue: [-10, 10, 0], aqua: [10, 0, 0] } },
-  { id: 'dramatic', name: 'Dramatic', adj: { contrast: 35, shadows: -25, highlights: -20, definition: 40, saturation: -10, vignette: 25 } },
-  { id: 'mono', name: 'Mono', adj: { contrast: 18, definition: 15 }, mono: true },
-  { id: 'noir', name: 'Noir', adj: { contrast: 45, blackPoint: 25, shadows: -20, vignette: 35, grain: 30 }, mono: true },
+// The groups Lightroom uses for Copy Settings and Create Preset.
+export type Group = 'light' | 'curve' | 'wb' | 'presence' | 'mix' | 'bw' | 'grading' | 'effects' | 'vignette' | 'grain'
+  | 'sharpen' | 'noise' | 'colornoise' | 'optics' | 'geometry' | 'calibration';
+export const GROUPS: { id: Group | 'crop' | 'profile'; label: string }[] = [
+  { id: 'profile', label: 'Profile' }, { id: 'light', label: 'Light' }, { id: 'curve', label: 'Tone Curve' },
+  { id: 'wb', label: 'White Balance' }, { id: 'presence', label: 'Vibrance & Saturation' }, { id: 'mix', label: 'Color Mix' },
+  { id: 'bw', label: 'Black & White' }, { id: 'grading', label: 'Color Grading' }, { id: 'effects', label: 'Texture, Clarity, Dehaze' },
+  { id: 'vignette', label: 'Vignette' }, { id: 'grain', label: 'Grain' }, { id: 'sharpen', label: 'Sharpening' },
+  { id: 'noise', label: 'Noise Reduction' }, { id: 'colornoise', label: 'Color Noise Reduction' }, { id: 'optics', label: 'Optics' },
+  { id: 'geometry', label: 'Geometry' }, { id: 'calibration', label: 'Calibration' }, { id: 'crop', label: 'Crop' },
 ];
 
-export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-const zero = () => Object.fromEntries(KEYS.map(k => [k, 0])) as Adj;
+export interface Spec { key: string; label: string; min: number; max: number; def: number; dp: number; group: Group; plus: boolean }
+const S = (key: string, label: string, min: number, max: number, group: Group, def = 0, dp = 0): Spec => ({ key, label, min, max, def, dp, group, plus: min < 0 });
+export const SPECS: Spec[] = [
+  S('Exposure2012', 'Exposure', -5, 5, 'light', 0, 2),
+  S('Contrast2012', 'Contrast', -100, 100, 'light'), S('Highlights2012', 'Highlights', -100, 100, 'light'),
+  S('Shadows2012', 'Shadows', -100, 100, 'light'), S('Whites2012', 'Whites', -100, 100, 'light'), S('Blacks2012', 'Blacks', -100, 100, 'light'),
+  S('ParametricHighlights', 'Highlights', -100, 100, 'curve'), S('ParametricLights', 'Lights', -100, 100, 'curve'),
+  S('ParametricDarks', 'Darks', -100, 100, 'curve'), S('ParametricShadows', 'Shadows', -100, 100, 'curve'),
+  S('ParametricShadowSplit', 'Shadow split', 10, 70, 'curve', 25), S('ParametricMidtoneSplit', 'Midtone split', 20, 80, 'curve', 50),
+  S('ParametricHighlightSplit', 'Highlight split', 30, 90, 'curve', 75),
+  S('IncrementalTemperature', 'Temp', -100, 100, 'wb'), S('IncrementalTint', 'Tint', -100, 100, 'wb'),
+  S('Vibrance', 'Vibrance', -100, 100, 'presence'), S('Saturation', 'Saturation', -100, 100, 'presence'),
+  ...BANDS.flatMap(b => [S(`HueAdjustment${b}`, 'Hue', -100, 100, 'mix'), S(`SaturationAdjustment${b}`, 'Saturation', -100, 100, 'mix'), S(`LuminanceAdjustment${b}`, 'Luminance', -100, 100, 'mix')]),
+  ...BANDS.map(b => S(`GrayMixer${b}`, b, -100, 100, 'bw')),
+  ...WHEELS.flatMap(w => [S(`ColorGrade${w}Hue`, 'Hue', 0, 359, 'grading'), S(`ColorGrade${w}Sat`, 'Saturation', 0, 100, 'grading'), S(`ColorGrade${w}Lum`, 'Luminance', -100, 100, 'grading')]),
+  S('ColorGradeBlending', 'Blending', 0, 100, 'grading', 50), S('SplitToningBalance', 'Balance', -100, 100, 'grading'),
+  S('Texture', 'Texture', -100, 100, 'effects'), S('Clarity2012', 'Clarity', -100, 100, 'effects'), S('Dehaze', 'Dehaze', -100, 100, 'effects'),
+  S('PostCropVignetteAmount', 'Vignette', -100, 100, 'vignette'), S('PostCropVignetteMidpoint', 'Midpoint', 0, 100, 'vignette', 50),
+  S('PostCropVignetteFeather', 'Feather', 0, 100, 'vignette', 50), S('PostCropVignetteRoundness', 'Roundness', -100, 100, 'vignette'),
+  S('PostCropVignetteHighlightContrast', 'Highlights', 0, 100, 'vignette'), S('PostCropVignetteStyle', 'Style', 1, 3, 'vignette', 1),
+  S('GrainAmount', 'Grain', 0, 100, 'grain'), S('GrainSize', 'Size', 0, 100, 'grain', 25), S('GrainFrequency', 'Roughness', 0, 100, 'grain', 50),
+  S('Sharpness', 'Sharpening', 0, 150, 'sharpen'), S('SharpenRadius', 'Radius', 0.5, 3, 'sharpen', 1, 1),
+  S('SharpenDetail', 'Detail', 0, 100, 'sharpen', 25), S('SharpenEdgeMasking', 'Masking', 0, 100, 'sharpen'),
+  S('LuminanceSmoothing', 'Noise Reduction', 0, 100, 'noise'), S('LuminanceNoiseReductionDetail', 'Detail', 0, 100, 'noise', 50),
+  S('LuminanceNoiseReductionContrast', 'Contrast', 0, 100, 'noise'),
+  S('ColorNoiseReduction', 'Color Noise Reduction', 0, 100, 'colornoise'), S('ColorNoiseReductionDetail', 'Detail', 0, 100, 'colornoise', 50),
+  S('ColorNoiseReductionSmoothness', 'Smoothness', 0, 100, 'colornoise', 50),
+  S('LensManualDistortionAmount', 'Distortion', -100, 100, 'optics'), S('VignetteAmount', 'Vignetting', -100, 100, 'optics'),
+  S('VignetteMidpoint', 'Midpoint', 0, 100, 'optics', 50),
+  S('PerspectiveVertical', 'Vertical', -100, 100, 'geometry'), S('PerspectiveHorizontal', 'Horizontal', -100, 100, 'geometry'),
+  S('PerspectiveRotate', 'Rotate', -10, 10, 'geometry', 0, 1), S('PerspectiveAspect', 'Aspect', -100, 100, 'geometry'),
+  S('PerspectiveScale', 'Scale', 50, 150, 'geometry', 100), S('PerspectiveX', 'X Offset', -100, 100, 'geometry'), S('PerspectiveY', 'Y Offset', -100, 100, 'geometry'),
+  S('ShadowTint', 'Shadows Tint', -100, 100, 'calibration'),
+  S('RedHue', 'Red Hue', -100, 100, 'calibration'), S('RedSaturation', 'Red Saturation', -100, 100, 'calibration'),
+  S('GreenHue', 'Green Hue', -100, 100, 'calibration'), S('GreenSaturation', 'Green Saturation', -100, 100, 'calibration'),
+  S('BlueHue', 'Blue Hue', -100, 100, 'calibration'), S('BlueSaturation', 'Blue Saturation', -100, 100, 'calibration'),
+];
+export const SPEC: Record<string, Spec> = Object.fromEntries(SPECS.map(s => [s.key, s]));
 
-// What the shader draws: every slider, plus the optional extras. Kept flat so it serializes as a Fabric filter param.
-export type Params = Adj & { hsl?: number[]; curves?: { c: Curves; k: number }[]; grade?: number[]; mono?: number };
-
-const hasCurve = (c?: Curves) => !!c && Object.values(c).some(p => p && p.length >= 2 && p.some(([x, y]) => Math.abs(x - y) > 0.5));
-const toneOn = (t?: Tone3) => !!t && (t.s > 0 || t.l !== 0);
-
-// Manual settings plus the chosen preset scaled by its amount (0-100).
-export const effective = (e: Look & { filter?: PhotoEdit['filter'] } | undefined, presets: Preset[]): Params => {
-  const out: Params = zero();
-  if (!e) return out;
-  const pre = e.filter ? presets.find(p => p.id === e.filter!.id) : undefined;
-  const k = pre && e.filter ? e.filter.amount / 100 : 0;
-  for (const key of KEYS) out[key] = clamp(Math.round((e.adj?.[key] ?? 0) + (pre?.adj[key] ?? 0) * k), minOf(key), 100);
-
-  const hsl = BANDS.flatMap(b => [0, 1, 2].map(i => clamp((e.hsl?.[b]?.[i] ?? 0) + (pre?.hsl?.[b]?.[i] ?? 0) * k, -100, 100)));
-  if (hsl.some(v => v !== 0)) out.hsl = hsl;
-
-  const curves = [pre && hasCurve(pre.curve) && k > 0 ? { c: pre.curve!, k } : null, hasCurve(e.curve) ? { c: e.curve!, k: 1 } : null].filter(Boolean) as Params['curves'];
-  if (curves!.length) out.curves = curves;
-
-  // Grading: a range you set yourself wins; otherwise the preset's, scaled by the amount.
-  const g: number[] = [];
-  let any = false;
-  for (const r of RANGES) {
-    const t = toneOn(e.grade?.[r]) ? e.grade![r]! : pre?.grade?.[r] ? { ...pre.grade[r]!, s: pre.grade[r]!.s * k, l: pre.grade[r]!.l * k } : undefined;
-    if (toneOn(t)) any = true;
-    g.push(t?.h ?? 0, t?.s ?? 0, t?.l ?? 0);
-  }
-  const src = e.grade && RANGES.some(r => toneOn(e.grade![r])) ? e.grade : pre?.grade;
-  if (any) out.grade = [...g, src?.blending ?? 50, src?.balance ?? 0];
-
-  const mono = Math.max(e.mono ? 1 : 0, pre?.mono ? k : 0);
-  if (mono > 0) out.mono = mono;
-  return out;
+// Develop settings: numbers by crs name, the B&W switch, the point curves, and the profile.
+export type Dev = { [key: string]: number | boolean | Pt[] | string | undefined } & {
+  ConvertToGrayscale?: boolean; ToneCurvePV2012?: Pt[]; ToneCurvePV2012Red?: Pt[]; ToneCurvePV2012Green?: Pt[]; ToneCurvePV2012Blue?: Pt[];
+  Profile?: string; // 'Color' (Adobe Color) or 'Monochrome' (Adobe Monochrome)
+  Temperature?: number; Tint?: number; // absolute white balance from raw presets: kept for export, not used on rendered photos (as in Lightroom)
 };
+export const PROFILES = ['Color', 'Monochrome'] as const;
+// An edit: the settings, an optional crop, and (right after applying a preset) what Amount blends between.
+export interface PhotoEdit { dev: Dev; crop?: CropParams; preset?: { id: string; amount: number; base: Dev } }
+export interface Preset { id: string; name: string; group?: string; dev: Dev }
 
-export const isNeutral = (p: Params) => KEYS.every(k => p[k] === 0) && !p.hsl && !p.curves && !p.grade && !p.mono;
-export const hasLook = (l: Look | undefined) => !!l && (KEYS.some(k => (l.adj?.[k] ?? 0) !== 0) || !!l.mono || hasCurve(l.curve)
-  || BANDS.some(b => l.hsl?.[b]?.some(v => v !== 0)) || RANGES.some(r => toneOn(l.grade?.[r])));
-export const isEdited = (e: PhotoEdit | undefined) => !!e && (!!e.crop || (!!e.filter && e.filter.amount > 0) || hasLook(e));
+export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+export const num = (d: Dev | undefined, k: string): number => { const v = d?.[k]; return typeof v === 'number' ? v : SPEC[k]?.def ?? 0; };
+const round = (k: string, v: number) => { const s = SPEC[k]; const f = 10 ** (s?.dp ?? 0); return Math.round(clamp(v, s?.min ?? -1e9, s?.max ?? 1e9) * f) / f; };
+export const isIdentity = (p?: Pt[]) => !p || p.length < 2 || p.every(([x, y]) => Math.abs(x - y) < 0.5);
+export const mono = (d: Dev | undefined) => !!d?.ConvertToGrayscale || d?.Profile === 'Monochrome';
 
-// --- tone curve math -------------------------------------------------------
-// Monotone cubic interpolation (Fritsch-Carlson) through the points: smooth like Lightroom, never overshoots.
+// Value as Lightroom shows it: "+0.50" for Exposure, "+25", "0", "1.0".
+export const fmt = (k: string, v: number) => { const s = SPEC[k]; const t = v.toFixed(s?.dp ?? 0); return s?.plus && v > 0 ? `+${t}` : t === '-0' ? '0' : t; };
+
+// Settings that differ from Lightroom's defaults (what an .xmp would carry).
+export const changed = (d: Dev | undefined): string[] => !d ? [] : Object.keys(d).filter(k => {
+  const v = d[k];
+  if (SPEC[k]) return typeof v === 'number' && Math.abs(v - SPEC[k].def) > 1e-9;
+  if ((CURVES as readonly string[]).includes(k)) return !isIdentity(v as Pt[]);
+  if (k === 'ConvertToGrayscale') return v === true;
+  if (k === 'Profile') return typeof v === 'string' && v !== 'Color';
+  return false;
+});
+export const isNeutralDev = (d: Dev | undefined) => !changed(d).filter(k => k !== 'Temperature' && k !== 'Tint').length;
+export const isEdited = (e: PhotoEdit | undefined) => !!e && (!!e.crop || !isNeutralDev(e.dev));
+export const groupOfKey = (k: string): Group | 'profile' | null => SPEC[k]?.group ?? ((CURVES as readonly string[]).includes(k) ? 'curve' : k === 'ConvertToGrayscale' ? 'bw' : k === 'Profile' ? 'profile' : k === 'Temperature' || k === 'Tint' ? 'wb' : null);
+export const pick = (d: Dev, groups: Set<string>): Dev => Object.fromEntries(Object.entries(d).filter(([k]) => groups.has(groupOfKey(k) ?? ''))) as Dev;
+
+// --- presets: Lightroom semantics ---------------------------------------------------------
+// Applying a preset sets the settings it contains. Amount (0-200) blends from the settings you had before
+// (0) to the preset (100) and beyond (200), like Lightroom's preset Amount slider.
 export const curveTable = (pts: Pt[]): Float32Array => {
   const p = [...pts].filter(q => Number.isFinite(q[0]) && Number.isFinite(q[1])).sort((a, b) => a[0] - b[0])
     .filter((q, i, a) => i === 0 || q[0] > a[i - 1][0]);
@@ -142,85 +128,155 @@ export const curveTable = (pts: Pt[]): Float32Array => {
   }
   return out;
 };
+const lerpCurve = (a: Pt[] | undefined, b: Pt[] | undefined, t: number): Pt[] => {
+  const ta = curveTable(a ?? [[0, 0], [255, 255]]), tb = curveTable(b ?? [[0, 0], [255, 255]]);
+  return Array.from({ length: 17 }, (_, i) => { const x = Math.min(255, i * 16); return [x, Math.round(clamp(ta[x] + (tb[x] - ta[x]) * t, 0, 255))] as Pt; });
+};
+export const blendDev = (base: Dev, target: Dev, t: number): Dev => {
+  const out: Dev = { ...base };
+  for (const k of Object.keys(target)) {
+    const a = base[k], b = target[k];
+    if (SPEC[k]) { const av = typeof a === 'number' ? a : SPEC[k].def, bv = typeof b === 'number' ? b : SPEC[k].def; out[k] = round(k, av + (bv - av) * t); }
+    else if ((CURVES as readonly string[]).includes(k)) out[k] = t >= 1 && t <= 1 ? (b as Pt[]) : lerpCurve(a as Pt[] | undefined, b as Pt[] | undefined, Math.min(1, t));
+    else out[k] = t >= 0.5 ? b : a;
+    if (out[k] === undefined || (!(k in base) && SPEC[k] && out[k] === SPEC[k].def)) delete out[k]; // nothing set: keep the edit clean
+  }
+  return out;
+};
+export const applyPreset = (e: PhotoEdit, p: Preset | undefined, amount = 100): PhotoEdit => {
+  const base = e.preset ? e.preset.base : e.dev;
+  if (!p) return { ...e, dev: { ...base }, preset: undefined };
+  return { ...e, dev: blendDev(base, { ...p.dev }, amount / 100), preset: { id: p.id, amount, base } };
+};
 
-// One 256-entry RGBA table for the shader: each layer's master curve then its channel curves, faded by its amount.
-export const buildLut = (layers: { c: Curves; k: number }[]): Uint8Array => {
+// --- tone curve tables for the engine ------------------------------------------------------------
+// Lightroom's parametric curve (four regions between three splits), as a smooth monotone curve on 0..255.
+export const parametricPoints = (d: Dev | undefined): Pt[] | null => {
+  const v = ['ParametricShadows', 'ParametricDarks', 'ParametricLights', 'ParametricHighlights'].map(k => num(d, k));
+  if (v.every(x => x === 0)) return null;
+  const s1 = num(d, 'ParametricShadowSplit') * 2.55, s2 = num(d, 'ParametricMidtoneSplit') * 2.55, s3 = num(d, 'ParametricHighlightSplit') * 2.55;
+  const xs = [s1 / 2, (s1 + s2) / 2, (s2 + s3) / 2, (s3 + 255) / 2];
+  return [[0, 0], ...xs.map((x, i) => [x, clamp(x + v[i] * 0.34 * Math.min(x, 255 - x, 64) / 64 * 1.2, 0, 255)] as Pt), [255, 255]];
+};
+// One RGBA table per edit: parametric curve, then the point curve, then each channel's point curve.
+export const buildLut = (d: Dev | undefined): Uint8Array | null => {
+  const para = parametricPoints(d);
+  const ch = CURVES.map(k => (isIdentity(d?.[k] as Pt[]) ? null : curveTable(d![k] as Pt[])));
+  if (!para && ch.every(c => !c)) return null;
+  const pt = para ? curveTable(para) : null;
+  const look = (t: Float32Array | null, v: number) => { if (!t) return v; const i = Math.floor(v), f = v - i; return i >= 255 ? t[255] : t[i] * (1 - f) + t[i + 1] * f; };
   const lut = new Uint8Array(256 * 4);
-  const tables = layers.map(l => ({ k: l.k, t: Object.fromEntries((['rgb', 'r', 'g', 'b'] as Channel[]).map(ch => [ch, l.c[ch] && l.c[ch]!.length >= 2 ? curveTable(l.c[ch]!) : null])) as Record<Channel, Float32Array | null> }));
-  const look = (t: Float32Array | null, v: number, k: number) => {
-    if (!t) return v;
-    const i = Math.floor(v), f = v - i, y = i >= 255 ? t[255] : t[i] * (1 - f) + t[i + 1] * f;
-    return v + (y - v) * k;
-  };
   for (let x = 0; x < 256; x++) {
-    const v = [x, x, x];
-    for (const { k, t } of tables) {
-      for (let c = 0; c < 3; c++) v[c] = look(t.rgb, v[c], k);
-      v[0] = look(t.r, v[0], k); v[1] = look(t.g, v[1], k); v[2] = look(t.b, v[2], k);
-    }
-    lut[x * 4] = Math.round(v[0]); lut[x * 4 + 1] = Math.round(v[1]); lut[x * 4 + 2] = Math.round(v[2]); lut[x * 4 + 3] = 255;
+    const m = look(ch[0], look(pt, x));
+    lut[x * 4] = Math.round(look(ch[1], m)); lut[x * 4 + 1] = Math.round(look(ch[2], m)); lut[x * 4 + 2] = Math.round(look(ch[3], m)); lut[x * 4 + 3] = 255;
   }
   return lut;
 };
 
-// Auto-enhance: look at brightness (0-1) and colour of the photo and pick slider values a person could then tweak.
-export interface PhotoStats { mean: number; p5: number; p95: number; sat: number }
-export const autoAdjust = (s: PhotoStats): Partial<Adj> => {
-  const out: Partial<Adj> = {};
-  const set = (k: AdjKey, v: number) => { if (v) out[k] = clamp(Math.round(v), -100, 100); };
-  set('exposure', clamp((0.46 - s.mean) * 120, -40, 40));
-  set('shadows', s.p5 < 0.08 ? clamp((0.08 - s.p5) * 300, 0, 40) : 0);
-  set('highlights', s.p95 > 0.92 ? -clamp((s.p95 - 0.92) * 400, 0, 40) : 0);
-  set('whites', s.p95 < 0.85 ? clamp((0.85 - s.p95) * 120, 0, 30) : 0);
-  set('blacks', s.p5 > 0.06 ? -clamp((s.p5 - 0.06) * 150, 0, 25) : 0);
-  set('contrast', s.p95 - s.p5 < 0.65 ? clamp((0.65 - (s.p95 - s.p5)) * 80, 0, 25) : 0);
-  set('vibrance', 15);
-  set('saturation', s.sat < 0.3 ? 8 : 0);
-  set('definition', 10);
-  return out;
+// --- Auto (like Lightroom's Auto: Light, plus Vibrance and Saturation) ----------------------------------
+export interface PhotoStats { mean: number; p1: number; p5: number; p95: number; p99: number; sat: number }
+export const autoSettings = (s: PhotoStats): Dev => {
+  const ev = clamp(Math.log2(0.42 / Math.max(0.02, s.mean)) * 0.8, -2, 2);
+  const range = s.p95 - s.p5;
+  return {
+    Exposure2012: round('Exposure2012', ev),
+    Contrast2012: round('Contrast2012', range < 0.6 ? (0.6 - range) * 60 : -(range - 0.8) * 40),
+    Highlights2012: round('Highlights2012', s.p99 > 0.97 ? -clamp((s.p99 - 0.9) * 400, 0, 60) : -10),
+    Shadows2012: round('Shadows2012', s.p5 < 0.1 ? clamp((0.1 - s.p5) * 400, 0, 50) : 5),
+    Whites2012: round('Whites2012', clamp((0.97 - s.p99) * 150, -30, 40)),
+    Blacks2012: round('Blacks2012', clamp((0.02 - s.p1) * 300, -40, 20)),
+    Vibrance: round('Vibrance', s.sat < 0.35 ? 18 : 10),
+    Saturation: round('Saturation', s.sat < 0.25 ? 5 : 0),
+  };
 };
 
-// Presets arrive from backups, imported files and storage: keep only well-formed numbers in range.
-const num = (v: unknown, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, lo, hi) : undefined);
+// --- validation -------------------------------------------------------------------------------------
 const cleanPts = (v: unknown): Pt[] | undefined => {
   if (!Array.isArray(v)) return undefined;
-  const pts = v.slice(0, 32).map(p => (Array.isArray(p) ? [num(p[0], 0, 255), num(p[1], 0, 255)] : [])).filter((p): p is Pt => p.length === 2 && p[0] !== undefined && p[1] !== undefined);
+  const pts = v.slice(0, 32).map(p => (Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]) ? [clamp(+p[0], 0, 255), clamp(+p[1], 0, 255)] : null)).filter((p): p is Pt => !!p);
   return pts.length >= 2 ? pts : undefined;
 };
-const cleanTone = (v: unknown): Tone3 | undefined => {
-  const t = v as Tone3;
-  if (!t || typeof t !== 'object') return undefined;
-  return { h: num(t.h, 0, 360) ?? 0, s: num(t.s, 0, 100) ?? 0, l: num(t.l, -100, 100) ?? 0 };
+export const cleanDev = (v: unknown): Dev => {
+  const q = (v ?? {}) as Record<string, unknown>, d: Dev = {};
+  for (const s of SPECS) { const x = q[s.key]; if (typeof x === 'number' && Number.isFinite(x)) d[s.key] = round(s.key, x); }
+  for (const k of CURVES) { const p = cleanPts(q[k]); if (p) d[k] = p; }
+  if (q.ConvertToGrayscale === true) d.ConvertToGrayscale = true;
+  if (q.Profile === 'Monochrome') d.Profile = 'Monochrome';
+  for (const k of ['Temperature', 'Tint'] as const) { const x = q[k]; if (typeof x === 'number' && Number.isFinite(x)) d[k] = clamp(x, k === 'Temperature' ? 2000 : -150, k === 'Temperature' ? 50000 : 150); }
+  return d;
 };
-export const cleanLook = (v: unknown): Look => {
-  const q = (v ?? {}) as Look;
-  const look: Look = { adj: {} };
-  for (const k of KEYS) { const x = num((q.adj as Record<string, unknown> | undefined)?.[k], minOf(k), 100); if (x) look.adj[k] = Math.round(x); }
-  if (q.hsl && typeof q.hsl === 'object') {
-    const hsl: Hsl = {};
-    for (const b of BANDS) { const t = (q.hsl as Record<string, unknown>)[b]; if (Array.isArray(t)) { const v3 = [0, 1, 2].map(i => num(t[i], -100, 100) ?? 0) as [number, number, number]; if (v3.some(x => x)) hsl[b] = v3; } }
-    if (Object.keys(hsl).length) look.hsl = hsl;
+
+// --- older SimplyCanva edits (before Lightroom settings) -------------------------------------------------
+// They stored iPhone-style sliders (-100..100) plus a preset added on top. Converted once, as closely as the two models allow.
+type Legacy = { adj?: Record<string, number>; hsl?: Record<string, number[]>; curve?: Record<string, Pt[]>; grade?: Record<string, { h: number; s: number; l: number } | number>; mono?: boolean };
+const LEGACY_BANDS: Record<string, Band> = { red: 'Red', orange: 'Orange', yellow: 'Yellow', green: 'Green', aqua: 'Aqua', blue: 'Blue', purple: 'Purple', magenta: 'Magenta' };
+export const legacyToDev = (l: Legacy | undefined): Dev => {
+  const a = l?.adj ?? {}, d: Record<string, number | boolean | Pt[]> = {};
+  const add = (k: string, v: number) => { if (v) d[k] = ((d[k] as number) ?? 0) + v; };
+  add('Exposure2012', (a.exposure ?? 0) / 100 * 1.5);
+  add('Contrast2012', a.contrast ?? 0); add('Highlights2012', a.highlights ?? 0); add('Shadows2012', a.shadows ?? 0);
+  add('Whites2012', a.whites ?? 0); add('Blacks2012', a.blacks ?? 0);
+  add('Shadows2012', (a.brilliance ?? 0) * 0.4); add('Highlights2012', -(a.brilliance ?? 0) * 0.3);
+  add('ParametricDarks', (a.brightness ?? 0) * 0.5); add('ParametricLights', (a.brightness ?? 0) * 0.5);
+  add('Blacks2012', -(a.blackPoint ?? 0) * 0.8);
+  add('IncrementalTemperature', a.warmth ?? 0); add('IncrementalTint', a.tint ?? 0);
+  add('Vibrance', a.vibrance ?? 0); add('Saturation', a.saturation ?? 0);
+  add('Texture', a.texture ?? 0); add('Clarity2012', a.definition ?? 0); add('Dehaze', a.dehaze ?? 0);
+  add('PostCropVignetteAmount', -(a.vignette ?? 0)); add('GrainAmount', a.grain ?? 0);
+  add('Sharpness', Math.max(0, a.sharpness ?? 0) * 1.2); add('LuminanceSmoothing', a.noiseReduction ?? 0);
+  for (const [b, v] of Object.entries(l?.hsl ?? {})) {
+    const B = LEGACY_BANDS[b];
+    if (B && Array.isArray(v)) { add(`HueAdjustment${B}`, v[0] ?? 0); add(`SaturationAdjustment${B}`, v[1] ?? 0); add(`LuminanceAdjustment${B}`, v[2] ?? 0); }
   }
-  if (q.curve && typeof q.curve === 'object') {
-    const curve: Curves = {};
-    for (const ch of ['rgb', 'r', 'g', 'b'] as Channel[]) { const p = cleanPts((q.curve as Record<string, unknown>)[ch]); if (p) curve[ch] = p; }
-    if (hasCurve(curve)) look.curve = curve;
+  const cmap: Record<string, CurveKey> = { rgb: 'ToneCurvePV2012', r: 'ToneCurvePV2012Red', g: 'ToneCurvePV2012Green', b: 'ToneCurvePV2012Blue' };
+  for (const [c, p] of Object.entries(l?.curve ?? {})) if (cmap[c]) d[cmap[c]] = p;
+  const g = l?.grade ?? {};
+  const wmap: Record<string, Wheel> = { shadows: 'Shadow', midtones: 'Midtone', highlights: 'Highlight', global: 'Global' };
+  for (const [r, w] of Object.entries(wmap)) { const t = g[r]; if (t && typeof t === 'object') { d[`ColorGrade${w}Hue`] = t.h; d[`ColorGrade${w}Sat`] = t.s; d[`ColorGrade${w}Lum`] = t.l; } }
+  if (typeof g.blending === 'number') d.ColorGradeBlending = g.blending;
+  if (typeof g.balance === 'number') d.SplitToningBalance = g.balance;
+  if (l?.mono) d.ConvertToGrayscale = true;
+  return cleanDev(d);
+};
+const addDev = (a: Dev, b: Dev, k: number): Dev => {
+  const out: Dev = { ...a };
+  for (const key of Object.keys(b)) {
+    if (SPEC[key] && typeof b[key] === 'number') out[key] = round(key, num(a, key) + ((b[key] as number) - SPEC[key].def) * k);
+    else if (!(key in a) && k >= 0.5) out[key] = b[key];
   }
-  if (q.grade && typeof q.grade === 'object') {
-    const grade: Grade = {};
-    for (const r of RANGES) { const t = cleanTone(q.grade[r]); if (toneOn(t)) grade[r] = t; }
-    const bl = num(q.grade.blending, 0, 100), ba = num(q.grade.balance, -100, 100);
-    if (bl !== undefined) grade.blending = bl;
-    if (ba !== undefined) grade.balance = ba;
-    if (RANGES.some(r => grade[r])) look.grade = grade;
-  }
-  if (q.mono === true) look.mono = true;
-  return look;
+  return out;
+};
+// Any edit or preset, old or new, as the current shape.
+export const migrateEdit = (e: unknown, presets: Preset[]): PhotoEdit | undefined => {
+  if (!e || typeof e !== 'object') return undefined;
+  const o = e as PhotoEdit & Legacy & { filter?: { id: string; amount: number } };
+  if (o.dev) return { dev: cleanDev(o.dev), ...(o.crop ? { crop: o.crop } : {}), ...(o.preset ? { preset: { id: String(o.preset.id), amount: clamp(+o.preset.amount || 0, 0, 200), base: cleanDev(o.preset.base) } } : {}) };
+  let dev = legacyToDev(o);
+  const pre = o.filter && presets.find(p => p.id === o.filter!.id);
+  if (pre && o.filter) dev = addDev(dev, pre.dev, clamp(o.filter.amount, 0, 200) / 100);
+  return { dev, ...(o.crop ? { crop: o.crop } : {}) };
 };
 export const cleanPreset = (v: unknown): Preset | null => {
-  const q = v as Preset;
+  const q = v as Preset & Legacy;
   if (!q || typeof q.id !== 'string' || typeof q.name !== 'string') return null;
-  const p: Preset = { id: q.id.slice(0, 40), name: q.name.slice(0, 80), ...cleanLook(q) };
+  const p: Preset = { id: q.id.slice(0, 40), name: q.name.slice(0, 80), dev: q.dev ? cleanDev(q.dev) : legacyToDev(q) };
   if (typeof q.group === 'string' && q.group.trim()) p.group = q.group.slice(0, 60);
   return p;
 };
+
+// --- built-in looks (group "SimplyCanva") ---------------------------------------------------------------
+const P = (id: string, name: string, dev: Dev): Preset => ({ id, name, group: 'SimplyCanva', dev: cleanDev(dev) });
+export const BUILTIN: Preset[] = [
+  P('vivid', 'Vivid', { Contrast2012: 15, Vibrance: 30, Saturation: 20, Clarity2012: 15 }),
+  P('bright', 'Bright', { Exposure2012: 0.35, Shadows2012: 30, Highlights2012: -15, Whites2012: 10 }),
+  P('warm', 'Warm', { IncrementalTemperature: 18, IncrementalTint: 4, Vibrance: 10 }),
+  P('cool', 'Cool', { IncrementalTemperature: -18, IncrementalTint: -3, Contrast2012: 5 }),
+  P('sunset', 'Sunset', { IncrementalTemperature: 28, IncrementalTint: 10, Saturation: 18, PostCropVignetteAmount: -15 }),
+  P('film', 'Film', { Contrast2012: 10, IncrementalTemperature: 8, Saturation: -12, GrainAmount: 25, ToneCurvePV2012: [[0, 22], [64, 66], [192, 196], [255, 245]] }),
+  P('fade', 'Fade', { Contrast2012: -15, Saturation: -20, ToneCurvePV2012: [[0, 40], [128, 135], [255, 240]] }),
+  P('matte', 'Matte', { Contrast2012: 10, Vibrance: 10, ToneCurvePV2012: [[0, 32], [64, 68], [192, 196], [255, 240]] }),
+  P('tealorange', 'Teal & Orange', { Contrast2012: 15, Vibrance: 10, ColorGradeShadowHue: 190, ColorGradeShadowSat: 35, ColorGradeHighlightHue: 35, ColorGradeHighlightSat: 30, ColorGradeBlending: 60, HueAdjustmentOrange: 5, SaturationAdjustmentOrange: 15, HueAdjustmentBlue: -10, SaturationAdjustmentBlue: 10, HueAdjustmentAqua: 10 }),
+  P('dramatic', 'Dramatic', { Contrast2012: 35, Shadows2012: -25, Highlights2012: -20, Clarity2012: 40, Saturation: -10, PostCropVignetteAmount: -25 }),
+  P('mono', 'Mono', { ConvertToGrayscale: true, Contrast2012: 18, Clarity2012: 15 }),
+  P('noir', 'Noir', { ConvertToGrayscale: true, Contrast2012: 45, Blacks2012: -30, Shadows2012: -20, PostCropVignetteAmount: -35, GrainAmount: 30 }),
+];

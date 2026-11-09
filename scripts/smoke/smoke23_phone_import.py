@@ -21,7 +21,7 @@ with sync_playwright() as p:
         sizes = pg.eval_on_selector_all('.lcell img', 'l => l.map(i => i.naturalWidth + "x" + i.naturalHeight)')
         print('blocked' if blocked else 'normal', 'cells', pg.locator('.lcell').count(), sizes, pg.locator('.toast').all_inner_texts())
         pg.screenshot(path=f'/tmp/claude-0/phone-{"blocked" if blocked else "normal"}.png')
-        pg.locator('.lcell').last.tap(); pg.wait_for_timeout(2500)
+        pg.locator('.lcell').last.tap(); pg.wait_for_timeout(800); pg.tap('#lp-edit'); pg.wait_for_timeout(2500)
         print('  opens editor', pg.is_visible('#editor'))
         print('  errors', errs[:4])
         b.close()

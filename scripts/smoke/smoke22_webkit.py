@@ -22,7 +22,7 @@ with sync_playwright() as p:
     pg.screenshot(path='/tmp/claude-0/wk-grid.png')
     print('select text', pg.inner_text('#lib-select'), 'pressed attrs', pg.locator('.lcell[aria-pressed]').count())
     print('tags', pg.locator('.lcell .ptag').all_inner_texts())
-    pg.locator('.lcell').nth(0).tap(); pg.wait_for_timeout(2000)
+    pg.locator('.lcell').nth(0).tap(); pg.wait_for_timeout(800); pg.tap('#lp-edit'); pg.wait_for_timeout(2000)
     print('editor open', pg.is_visible('#editor'), 'library visible', pg.is_visible('#library'))
     pg.screenshot(path='/tmp/claude-0/wk-open.png')
     b.close()

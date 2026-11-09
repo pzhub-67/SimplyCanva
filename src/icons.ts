@@ -7,6 +7,8 @@ export const ICONS: Record<string, string> = {
   'ed-color': '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
   'ed-effects': '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="5"/>',
   'ed-detail': '<path d="M12 3 3 20h18L12 3z"/><path d="M12 10v5"/>',
+  'ed-optics': '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
+  'ed-geometry': '<path d="M4 20 8 4h8l4 16z"/><path d="M12 4v16"/>',
   undo: '<path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/>',
   redo: '<path d="m15 14 5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/>',
   home: '<path d="M3 11 12 4l9 7M5 10v10h14V10"/>',

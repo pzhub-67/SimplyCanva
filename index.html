@@ -212,7 +212,8 @@
   .ed-head .tool { flex: 1; font-size: 14px; }
   #ed-compare { background: var(--raised); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   .ed-head .btn { flex: 1; }
-  .ed-tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; border-top: 1px solid var(--rule); }
+  .ed-tabs { display: flex; overflow-x: auto; gap: 2px; border-top: 1px solid var(--rule); scrollbar-width: none; }
+  .ed-tabs .tool { flex: 1 0 58px; }
   .ed-tabs .tool { min-width: 0; min-height: 52px; padding: 4px 2px; font-size: 12px; color: var(--muted); border-radius: 0; }
   .ed-tabs .tool[aria-pressed="true"] { background: none; color: var(--ink); border-top: 2px solid var(--accent); }
   .ed-body { height: min(40vh, 340px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
@@ -243,7 +244,7 @@
   .lib-tools .muted { flex: 1; margin: 0; font-variant-numeric: tabular-nums; }
   .seg3 { display: flex; gap: 4px; }
   .seg3 .chip { min-height: 36px; padding: 6px 12px; }
-  .lgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(31vw, 150px), 1fr)); gap: 3px; }
+  .lgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(30vw, 120px), 1fr)); gap: 2px; }
   .lcell { position: relative; aspect-ratio: 1; padding: 0; border: 0; background: var(--raised); cursor: pointer; overflow: hidden; -webkit-touch-callout: none; user-select: none; }
   .lcell img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
   .lcell .flag { position: absolute; left: 6px; top: 4px; color: #fff; font-size: 15px; text-shadow: 0 1px 2px rgb(0 0 0 / .6); }
@@ -254,6 +255,30 @@
   .lcell[aria-pressed]::after { content: ""; position: absolute; right: 6px; top: 6px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; box-sizing: border-box; background: rgb(0 0 0 / .25); }
   .lcell[aria-pressed="true"]::after { background: var(--accent); }
   .lib-empty { padding: 48px 8px; max-width: 460px; }
+  .lib-albums { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .lib-albums .chip { flex: none; min-height: 34px; padding: 6px 12px; }
+  .lib-tools input[type=search] { flex: 1; min-width: 0; min-height: 38px; padding: 6px 10px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--ink); font-size: 16px; }
+  .lib-tools select { min-height: 38px; }
+  .lib-filters { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 4px 0; }
+  .lcell .stars { position: absolute; right: 6px; top: 4px; color: #fff; font-size: 11px; letter-spacing: 1px; text-shadow: 0 1px 2px rgb(0 0 0 / .7); }
+  .lcell .rej { position: absolute; left: 6px; top: 3px; color: #fff; font-size: 14px; text-shadow: 0 1px 2px rgb(0 0 0 / .7); }
+  .lcell.rejected img { opacity: .45; }
+  .loupe { position: fixed; inset: 0; z-index: 4; display: flex; flex-direction: column; background: #000; color: #f2f5f4; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+  .loupe-bar, .loupe-foot { display: flex; align-items: center; gap: 2px; padding: 6px 8px; }
+  .loupe-bar .tool.icon { min-width: 40px; }
+  .loupe-bar .tool, .loupe-foot .tool { color: #f2f5f4; }
+  .loupe-bar .tool[aria-pressed="true"] { background: #2a2f2e; color: #3cc3b9; }
+  .loupe-foot { justify-content: flex-end; }
+  .loupe-foot .muted { margin-right: auto; color: #a9b2b0; font-variant-numeric: tabular-nums; }
+  .loupe-stage { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; touch-action: pan-y; overflow: hidden; }
+  .loupe-stage img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; transition: transform .2s; }
+  .loupe-nav { position: absolute; left: 4px; top: 50%; transform: translateY(-50%); width: 44px; height: 64px; border: 0; border-radius: 8px; background: rgb(0 0 0 / .35); color: #fff; font-size: 30px; cursor: pointer; }
+  .loupe-nav.right { left: auto; right: 4px; }
+  .loupe-meta { margin: 0; padding: 4px 14px; color: #a9b2b0; font-size: 13px; }
+  .stars { display: flex; gap: 2px; margin-right: auto; }
+  .stars button { width: 30px; height: 40px; border: 0; background: none; color: #6b7472; font-size: 22px; cursor: pointer; padding: 0; }
+  .stars button.on { color: #f2cf1d; }
+  #lib-export { z-index: 5; }
   .lib-empty h2 { font: 600 20px var(--font-ui); margin-bottom: 8px; }
   .lib-empty p { color: var(--muted); margin: 0; }
   .lib-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; overflow-x: auto; gap: 2px; padding: 6px 8px max(6px, env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--border); scrollbar-width: none; }
@@ -262,8 +287,25 @@
   .lib-sheet .opt { min-height: 44px; }
   @media (min-width: 960px) { .lib-sheet { left: auto; right: 16px; top: 16px; bottom: 80px; width: 380px; max-height: none; } .lib-in { padding-inline: 24px; } }
   .ed-tabs .tool svg { width: 20px; height: 20px; }
+  .ed-head .tool.icon { min-width: 40px; }
+  #ed-more { font-size: 22px; line-height: 1; }
+  .ed-menu { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; max-height: 50vh; overflow: auto; }
+  .ed-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+  .ed-groups label { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 14px; }
+  .ed-groups input { width: 20px; height: 20px; accent-color: var(--accent); }
+  .seg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .seg2 .chip { text-align: center; }
+  #hist { width: 100%; height: 56px; border-radius: var(--radius-control); background: var(--well); }
+  #wheel { width: min(60vw, 200px); aspect-ratio: 1; align-self: center; touch-action: none; cursor: crosshair; }
+  .slide output { cursor: text; }
+  .slide input.num { width: 64px; min-height: 32px; padding: 2px 6px; border: 1px solid var(--control); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; text-align: right; }
+  .slide.track-temp input[type=range] { background: linear-gradient(90deg, #3b6fd8, #d9d9d9, #e3c13b); }
+  .slide.track-tint input[type=range] { background: linear-gradient(90deg, #3faa49, #d9d9d9, #c040b8); }
+  .slide.track-temp input[type=range], .slide.track-tint input[type=range], .slide.track-hue input[type=range] { appearance: none; -webkit-appearance: none; height: 6px; border-radius: 999px; accent-color: var(--ink); }
+  .slide.track-hue input[type=range] { background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+  .slide.track-temp input[type=range]::-webkit-slider-thumb, .slide.track-tint input[type=range]::-webkit-slider-thumb, .slide.track-hue input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); }
   #curve-box { display: flex; flex-direction: column; gap: 6px; }
-  #curve { width: min(100%, 300px); aspect-ratio: 1; align-self: center; touch-action: none; border-radius: var(--radius-control); background: var(--well); cursor: crosshair; }
+  #curve { width: min(100%, 260px); aspect-ratio: 1; align-self: center; touch-action: none; border-radius: var(--radius-control); background: var(--well); cursor: crosshair; }
   #filters .chip.th { min-width: 76px; }
   #crop { position: absolute; inset: 0; z-index: 4; background: var(--well); }
   #crop canvas { display: block; width: 100%; height: 100%; touch-action: none; }
@@ -445,60 +487,49 @@
   <section id="editor" class="bar" aria-label="Photo editor" hidden>
     <div class="ed-head">
       <button class="tool" id="ed-cancel">Cancel</button>
+      <button class="tool icon" id="ed-undo" aria-label="Undo" disabled><span data-icon="undo"></span></button>
+      <button class="tool icon" id="ed-redo" aria-label="Redo" disabled><span data-icon="redo"></span></button>
       <button class="tool" id="ed-compare" aria-label="Hold to compare with the original">Compare</button>
-      <button class="tool" id="ed-revert">Revert</button>
-      <button class="tool" id="ed-save" aria-label="Save a full-size JPG" hidden>Save</button>
+      <button class="tool icon" id="ed-more" aria-label="More: copy, paste, previous, reset, create preset" aria-expanded="false">⋯</button>
       <button class="btn" id="ed-done">Done</button>
+    </div>
+    <div id="ed-menu" class="ed-menu" hidden>
+      <button class="opt" data-ed-menu="copy">Copy settings…</button>
+      <button class="opt" data-ed-menu="paste">Paste settings</button>
+      <button class="opt" data-ed-menu="previous">Previous (last photo's settings)</button>
+      <button class="opt" data-ed-menu="preset">Create preset…</button>
+      <button class="opt" data-ed-menu="reset">Reset all</button>
+      <button class="opt" data-ed-menu="save" id="ed-save" hidden>Save full-size JPG</button>
+    </div>
+    <div id="ed-dialog" class="ed-menu" hidden>
+      <h3 class="ed-sub" id="ed-dialog-h"></h3>
+      <div id="ed-dialog-fields" class="list"></div>
+      <div id="ed-groups" class="ed-groups"></div>
+      <div class="ed-row"><button class="btn quiet" id="ed-dialog-cancel">Cancel</button><button class="btn" id="ed-dialog-ok">OK</button></div>
     </div>
     <div class="ed-body">
     <div data-ed-panel="presets" hidden>
-      <div class="ed-row">
-        <select id="pgroup" aria-label="Preset group"></select>
-        <label class="btn quiet file-btn">Import<input id="pimport" type="file" multiple aria-label="Import Lightroom presets (.xmp, .lrtemplate or .zip)"></label>
-        <button class="btn quiet" id="pmanage-btn" aria-expanded="false">Manage</button>
-      </div>
-      <div id="filters" class="dial"></div>
-      <div class="slide" id="amount" hidden>
-        <span class="slide-name">Amount</span>
-        <input id="amt-range" type="range" min="0" max="200" step="1" value="100" aria-label="Preset amount">
-        <output id="amt-val"></output>
-      </div>
-      <div id="pmanage" hidden>
-        <div class="prow">
-          <input id="preset-name" type="text" placeholder="Name this look" aria-label="Preset name" maxlength="60">
-          <button class="btn" id="save-preset">Save look</button>
+      <div class="seg2"><button class="chip" data-pmode="presets">Presets</button><button class="chip" data-pmode="profiles">Profiles</button></div>
+      <div id="preset-area">
+        <div class="ed-row">
+          <select id="pgroup" aria-label="Preset group"></select>
+          <label class="btn quiet file-btn">Import<input id="pimport" type="file" multiple aria-label="Import Lightroom presets (.xmp, .lrtemplate or .zip)"></label>
+          <button class="btn quiet" id="pmanage-btn" aria-expanded="false">Manage</button>
         </div>
-        <div id="mine" class="prows"></div>
-        <div class="ed-row"><button class="btn quiet" id="pexport-all">Export my presets (.zip of .xmp)</button></div>
-        <p class="muted" id="pnote">Imports Lightroom presets: .xmp files, old .lrtemplate files, or a .zip pack. Exports .xmp files Lightroom can import.</p>
-      </div>
-    </div>
-    <div data-ed-panel="light" hidden>
-      <div class="ed-row">
-        <button class="chip" id="ed-auto">Auto</button>
-        <button class="chip" id="curve-btn" aria-pressed="false">Curve</button>
-      </div>
-      <div id="curve-box" hidden>
-        <div class="ed-row" id="curve-ch">
-          <button class="chip" data-ch="rgb">RGB</button><button class="chip" data-ch="r">Red</button><button class="chip" data-ch="g">Green</button><button class="chip" data-ch="b">Blue</button>
-          <button class="tool" id="curve-reset">Reset</button>
+        <div id="filters" class="dial"></div>
+        <div class="slide" id="amount" hidden>
+          <span class="slide-name">Amount</span>
+          <input id="amt-range" type="range" min="0" max="200" step="1" value="100" aria-label="Preset amount">
+          <output id="amt-val"></output>
         </div>
-        <canvas id="curve" width="300" height="300" aria-label="Tone curve. Tap to add a point, drag to move it, drag it off or double-tap to remove it."></canvas>
+        <div id="pmanage" hidden>
+          <div id="mine" class="prows"></div>
+          <div class="ed-row"><button class="btn quiet" id="pexport-all">Export my presets (.zip of .xmp)</button></div>
+          <p class="muted">Import takes Lightroom presets: .xmp files, old .lrtemplate files, or a .zip pack. Export gives .xmp files Lightroom imports.</p>
+        </div>
       </div>
-      <div class="sliders" data-sliders="light"></div>
+      <div id="profile-area" class="dial" hidden></div>
     </div>
-    <div data-ed-panel="color" hidden>
-      <div class="ed-row"><button class="chip" id="ed-mono" aria-pressed="false">Black &amp; white</button></div>
-      <div class="sliders" data-sliders="color"></div>
-      <h3 class="ed-sub">Mixer</h3>
-      <div class="dots" id="bands"></div>
-      <div class="sliders" id="mix-sliders"></div>
-      <h3 class="ed-sub">Grading</h3>
-      <div class="seg" id="ranges"></div>
-      <div class="sliders" id="grade-sliders"></div>
-    </div>
-    <div data-ed-panel="effects" hidden><div class="sliders" data-sliders="effects"></div></div>
-    <div data-ed-panel="detail" hidden><div class="sliders" data-sliders="detail"></div></div>
     <div data-ed-panel="crop" hidden>
       <div id="ratios" class="dial"></div>
       <div class="dial">
@@ -513,6 +544,69 @@
         <button class="tool" id="crop-reset">Reset</button>
       </div>
     </div>
+    <div data-ed-panel="light" hidden>
+      <canvas id="hist" width="300" height="60" aria-label="Histogram"></canvas>
+      <div class="ed-row">
+        <button class="chip" id="ed-auto">Auto</button>
+        <button class="chip" id="curve-btn" aria-pressed="false">Curve</button>
+      </div>
+      <div id="curve-box" hidden>
+        <div class="ed-row" id="curve-ch">
+          <button class="chip" data-ch="para">Parametric</button><button class="chip" data-ch="ToneCurvePV2012">Point</button>
+          <button class="chip" data-ch="ToneCurvePV2012Red">Red</button><button class="chip" data-ch="ToneCurvePV2012Green">Green</button><button class="chip" data-ch="ToneCurvePV2012Blue">Blue</button>
+          <button class="tool" id="curve-reset">Reset</button>
+        </div>
+        <canvas id="curve" width="300" height="300" aria-label="Tone curve. In Point, Red, Green and Blue: tap to add a point, drag to move it, drag it off or double-tap to remove it."></canvas>
+        <div class="sliders" id="para-sliders"></div>
+      </div>
+      <div class="sliders" data-sliders="light"></div>
+    </div>
+    <div data-ed-panel="color" hidden>
+      <div class="ed-row">
+        <button class="chip" id="ed-mono" aria-pressed="false">B&amp;W</button>
+        <button class="chip" data-csub="mix" aria-pressed="false">Mix</button>
+        <button class="chip" data-csub="grading" aria-pressed="false">Grading</button>
+        <button class="chip" data-csub="calibration" aria-pressed="false">Calibration</button>
+      </div>
+      <div class="sliders" data-sliders="wb"></div>
+      <div class="sliders" data-sliders="presence"></div>
+      <div data-csub-panel="mix" hidden>
+        <h3 class="ed-sub" id="mix-h">Color Mix</h3>
+        <div class="dots" id="bands"></div>
+        <div class="sliders" id="mix-sliders"></div>
+        <div class="sliders" id="gray-sliders" hidden></div>
+      </div>
+      <div data-csub-panel="grading" hidden>
+        <h3 class="ed-sub">Color Grading</h3>
+        <div class="seg" id="ranges"></div>
+        <canvas id="wheel" width="200" height="200" aria-label="Color wheel: drag to choose hue and saturation"></canvas>
+        <div class="sliders" id="grade-sliders"></div>
+      </div>
+      <div data-csub-panel="calibration" hidden>
+        <h3 class="ed-sub">Calibration</h3>
+        <div class="sliders" data-sliders="calibration"></div>
+      </div>
+    </div>
+    <div data-ed-panel="effects" hidden>
+      <div class="sliders" data-sliders="effects"></div>
+      <h3 class="ed-sub">Vignette</h3>
+      <div class="sliders" data-sliders="vignette"></div>
+      <div class="ed-row"><span class="slide-name">Style</span><select id="vig-style" aria-label="Vignette style"><option value="1">Highlight Priority</option><option value="2">Color Priority</option><option value="3">Paint Overlay</option></select></div>
+      <h3 class="ed-sub">Grain</h3>
+      <div class="sliders" data-sliders="grain"></div>
+    </div>
+    <div data-ed-panel="detail" hidden>
+      <div class="sliders" data-sliders="sharpen"></div>
+      <div class="sliders" data-sliders="noise"></div>
+      <div class="sliders" data-sliders="colornoise"></div>
+    </div>
+    <div data-ed-panel="optics" hidden>
+      <div class="sliders" data-sliders="optics"></div>
+      <p class="muted">Lens profiles and chromatic aberration removal need the camera's raw data, so only the manual corrections are here.</p>
+    </div>
+    <div data-ed-panel="geometry" hidden>
+      <div class="sliders" data-sliders="geometry"></div>
+    </div>
     </div>
     <div class="ed-tabs">
       <button class="tool" data-ed-tab="presets" aria-pressed="false"><span data-icon="ed-presets"></span>Presets</button>
@@ -521,6 +615,8 @@
       <button class="tool" data-ed-tab="color" aria-pressed="false"><span data-icon="ed-color"></span>Color</button>
       <button class="tool" data-ed-tab="effects" aria-pressed="false"><span data-icon="ed-effects"></span>Effects</button>
       <button class="tool" data-ed-tab="detail" aria-pressed="false"><span data-icon="ed-detail"></span>Detail</button>
+      <button class="tool" data-ed-tab="optics" aria-pressed="false"><span data-icon="ed-optics"></span>Optics</button>
+      <button class="tool" data-ed-tab="geometry" aria-pressed="false"><span data-icon="ed-geometry"></span>Geometry</button>
     </div>
   </section>
   <input id="img" type="file" accept="image/*" multiple hidden>
@@ -529,21 +625,30 @@
     <div class="lib-in">
       <div class="lib-bar">
         <button id="lib-back" class="tool icon" aria-label="Back to designs"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
-        <h1>Photos</h1>
+        <h1 id="lib-title">All Photos</h1>
         <button id="lib-presets" class="btn quiet">Presets</button>
-        <label class="btn file-btn">Add photos<input id="lib-add" type="file" accept="image/*" multiple aria-label="Add photos"></label>
+        <label class="btn file-btn">Add<input id="lib-add" type="file" accept="image/*" multiple aria-label="Add photos"></label>
       </div>
+      <div class="lib-albums" id="lib-albums"></div>
       <div class="lib-tools">
-        <div class="seg3"><button class="chip" data-lib-filter="all">All</button><button class="chip" data-lib-filter="picks">Flagged</button><button class="chip" data-lib-filter="edited">Edited</button></div>
-        <span id="lib-count" class="muted"></span>
-        <button id="lib-select" class="tool">Select</button>
+        <input id="lib-search" type="search" placeholder="Search names" aria-label="Search photos by name">
+        <select id="lib-sort" aria-label="Sort">
+          <option value="added">Import date</option><option value="taken">Capture date</option><option value="name">File name</option><option value="rating">Rating</option><option value="updated">Edit time</option>
+        </select>
+        <button id="lib-filter-btn" class="btn quiet" aria-expanded="false">Filter</button>
       </div>
+      <div id="lib-filters" class="lib-filters" hidden>
+        <div class="ed-row"><span class="slide-name">Flag</span><select id="lf-flag" aria-label="Flag filter"><option value="">Any</option><option value="pick">Picked</option><option value="none">Unflagged</option><option value="reject">Rejected</option></select></div>
+        <div class="ed-row"><span class="slide-name">Rating</span><select id="lf-rating" aria-label="Rating filter"><option value="0">Any</option><option value="1">★ or more</option><option value="2">★★ or more</option><option value="3">★★★ or more</option><option value="4">★★★★ or more</option><option value="5">★★★★★</option></select></div>
+        <div class="ed-row"><span class="slide-name">Edits</span><select id="lf-edit" aria-label="Edit filter"><option value="">Any</option><option value="edited">Edited</option><option value="unedited">Not edited</option></select></div>
+      </div>
+      <div class="lib-tools"><span id="lib-count" class="muted"></span><button id="lib-select" class="tool">Select</button></div>
       <div id="lib-grid" class="lgrid"></div>
       <div id="lib-empty" class="lib-empty" hidden>
         <h2>Your photo library</h2>
-        <p>Add photos to edit them with Light, Color, Effects, Detail, curves and your Lightroom presets. They stay on this device.</p>
+        <p>Add photos to edit them with Lightroom's panels and your Lightroom presets. They stay on this device.</p>
       </div>
-      <p id="lib-empty-filter" class="muted" hidden>No photos match this filter.</p>
+      <p id="lib-empty-filter" class="muted" hidden>No photos match.</p>
     </div>
     <div id="lib-sheet" class="lib-sheet" hidden>
       <div class="sheet-head"><h2 id="lib-sheet-h">Presets</h2><button id="lib-sheet-close" class="btn quiet">Close</button></div>
@@ -555,13 +660,45 @@
     </div>
     <div id="lib-actions" class="lib-actions" hidden>
       <button class="tool" data-lib-act="all">All</button>
-      <button class="tool" id="lib-pick" data-lib-act="pick">Flag</button>
+      <button class="tool" data-lib-act="pick">Pick</button>
+      <button class="tool" data-lib-act="reject">Reject</button>
+      <button class="tool" data-lib-act="rate">Rate</button>
+      <button class="tool" data-lib-act="album">Album</button>
       <button class="tool" data-lib-act="preset">Preset</button>
       <button class="tool" data-lib-act="copy">Copy</button>
       <button class="tool" data-lib-act="paste">Paste</button>
-      <button class="tool" data-lib-act="save">Save JPG</button>
+      <button class="tool" data-lib-act="save">Export</button>
       <button class="tool" data-lib-act="design">To design</button>
       <button class="tool" id="lib-del" data-lib-act="del">Delete</button>
+    </div>
+    <div id="loupe" class="loupe" hidden>
+      <div class="loupe-bar">
+        <button id="lp-back" class="tool icon" aria-label="Back to the grid"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
+        <div id="lp-stars" class="stars" role="group" aria-label="Rating"></div>
+        <button id="lp-pick" class="tool icon" aria-label="Pick" aria-pressed="false">⚑</button>
+        <button id="lp-reject" class="tool icon" aria-label="Reject" aria-pressed="false">✕</button>
+        <button id="lp-info" class="tool icon" aria-label="Info" aria-pressed="false">i</button>
+      </div>
+      <div id="lp-stage" class="loupe-stage">
+        <img id="lp-img" alt="">
+        <button id="lp-prev" class="loupe-nav" aria-label="Previous photo">‹</button>
+        <button id="lp-next" class="loupe-nav right" aria-label="Next photo">›</button>
+      </div>
+      <p id="lp-meta" class="loupe-meta" hidden></p>
+      <div class="loupe-foot">
+        <span id="lp-pos" class="muted"></span>
+        <button id="lp-save" class="btn quiet">Export</button>
+        <button id="lp-edit" class="btn">Edit</button>
+      </div>
+    </div>
+    <div id="lib-export" class="lib-sheet" hidden>
+      <div class="sheet-head"><h2 id="lx-h">Export</h2><button id="lx-close" class="btn quiet">Cancel</button></div>
+      <div class="list">
+        <div class="ed-row"><span class="slide-name">Format</span><select id="lx-format" aria-label="File type"><option value="jpeg">JPG</option><option value="png">PNG</option></select></div>
+        <div class="ed-row"><span class="slide-name">Size</span><select id="lx-size" aria-label="Size"><option value="0">Full size (up to 4096 px)</option><option value="2048">Small (2048 px)</option><option value="1440">1440 px</option><option value="1080">1080 px</option></select></div>
+        <div class="slide" id="lx-q-row"><span class="slide-name">Quality</span><input id="lx-q" type="range" min="10" max="100" step="1" value="92" aria-label="JPG quality"><output id="lx-qv">92</output></div>
+        <button id="lx-go" class="btn">Export</button>
+      </div>
     </div>
   </div>
 

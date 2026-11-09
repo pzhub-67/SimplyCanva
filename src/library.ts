@@ -4,16 +4,18 @@
 // Presets live here too, so a preset pack survives reloads (localStorage can be cleared or blocked in some viewers).
 import { fabric } from 'fabric';
 import { dbName } from './accounts';
-import { makeAdjustFilter } from './adjust';
+import { makeDevelopFilter } from './develop';
 import { renderCropped } from './crop';
 import type { CropParams } from './cropMath';
-import { PhotoEdit, Preset, effective, isNeutral } from './photoModel';
+import { PhotoEdit, isNeutralDev } from './photoModel';
 import { Enc, getKey, isSealed, open as openEnc, openBytes, seal, sealBytes } from './vault';
 
 export interface PhotoRec {
   id: string; name: string; added: number; updated: number;
   w: number; h: number; pw: number; ph: number; // full and working-copy pixel sizes
-  thumb: string; edit?: PhotoEdit; pick?: boolean; taken?: number;
+  thumb: string; edit?: PhotoEdit; taken?: number;
+  flag?: 'pick' | 'reject'; rating?: number; albums?: string[]; pick?: boolean; // pick: older records, read as flag 'pick'
+  look?: string; // name of the last preset applied from the library, shown on the grid
 }
 type Kind = 'full' | 'preview';
 export const FULL_PX = 4096, PREVIEW_PX = 1600, THUMB_PX = 360;
@@ -138,7 +140,7 @@ const withBigBackend = async <T,>(fn: () => Promise<T>): Promise<T> => {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 // The photo with its edit applied: the full size for export, or a small grid thumbnail.
-export const renderEdited = async (rec: PhotoRec, edit: PhotoEdit | undefined, presets: Preset[], size: 'full' | 'thumb'): Promise<HTMLCanvasElement> => {
+export const renderEdited = async (rec: PhotoRec, edit: PhotoEdit | undefined, size: 'full' | 'view' | 'thumb'): Promise<HTMLCanvasElement> => {
   const kind: Kind = size === 'full' ? 'full' : 'preview';
   let url = await blobUrl(await getFile(rec.id, kind));
   if (edit?.crop) url = await renderCropped(url, kind === 'full' ? scaleCrop(edit.crop, rec.w / rec.pw) : edit.crop);
@@ -148,16 +150,32 @@ export const renderEdited = async (rec: PhotoRec, edit: PhotoEdit | undefined, p
   }
   const run = async () => {
     const im = await loadFabric(url);
-    const p = effective(edit, presets);
-    im.filters = isNeutral(p) ? [] : [makeAdjustFilter(p)];
+    im.filters = !edit || isNeutralDev(edit.dev) ? [] : [makeDevelopFilter(edit.dev, im.getElement())];
     im.applyFilters();
     const el = im.getElement() as unknown as HTMLCanvasElement;
-    return scaled(el, el.width, el.height, size === 'thumb' ? THUMB_PX : FULL_PX);
+    return scaled(el, el.width, el.height, size === 'thumb' ? THUMB_PX : size === 'view' ? PREVIEW_PX : FULL_PX);
   };
   return size === 'full' ? withBigBackend(run) : run();
 };
-export const exportJpeg = async (rec: PhotoRec, presets: Preset[], edit = rec.edit) => { const cv = await renderEdited(rec, edit, presets, 'full'); try { return await toBlob(cv, 0.92); } finally { free(cv); } };
-export const refreshThumb = async (rec: PhotoRec, presets: Preset[]) => { const cv = await renderEdited(rec, rec.edit, presets, 'thumb'); rec.thumb = cv.toDataURL('image/jpeg', 0.78); free(cv); };
+export const exportJpeg = async (rec: PhotoRec, edit = rec.edit) => { const cv = await renderEdited(rec, edit, 'full'); try { return await toBlob(cv, 0.92); } finally { free(cv); } };
+// Export like Lightroom's Export: JPG or PNG, a long-edge size (0 = full size), JPG quality 1-100.
+export interface ExportOpts { format: 'jpeg' | 'png'; longEdge: number; quality: number }
+export const exportImage = async (rec: PhotoRec, o: ExportOpts, edit = rec.edit) => {
+  const big = await renderEdited(rec, edit, o.longEdge && o.longEdge <= PREVIEW_PX ? 'view' : 'full');
+  const cv = o.longEdge && Math.max(big.width, big.height) > o.longEdge ? scaled(big, big.width, big.height, o.longEdge) : big;
+  try { return await new Promise<Blob>((res, rej) => cv.toBlob(b => (b ? res(b) : rej(new Error('encode failed'))), `image/${o.format}`, o.quality / 100)); }
+  finally { free(cv); if (cv !== big) free(big); }
+};
+export const viewUrl = async (rec: PhotoRec) => { const cv = await renderEdited(rec, rec.edit, 'view'); const u = cv.toDataURL('image/jpeg', 0.9); free(cv); return u; };
+export const refreshThumb = async (rec: PhotoRec) => { const cv = await renderEdited(rec, rec.edit, 'thumb'); rec.thumb = cv.toDataURL('image/jpeg', 0.78); free(cv); };
+
+// --- albums (one record) ---------------------------------------------------------------
+export interface Album { id: string; name: string }
+export const loadAlbums = async (): Promise<Album[]> => {
+  const v = await unwrap<{ id: string; list: Album[] }>(await getOne('kv', 'albums')).catch(() => undefined);
+  return Array.isArray(v?.list) ? v!.list.filter(a => a && typeof a.id === 'string' && typeof a.name === 'string').map(a => ({ id: a.id.slice(0, 40), name: a.name.slice(0, 60) })) : [];
+};
+export const saveAlbums = async (list: Album[]) => { await write([['kv', await wrap({ id: 'albums', list })]]); };
 
 // --- presets (one record) ------------------------------------------------------------
 export const loadPresetList = async (): Promise<unknown[] | null> => {

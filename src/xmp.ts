@@ -1,90 +1,48 @@
 // Lightroom presets in and out. Reads .xmp (Lightroom Classic / mobile / Camera Raw), old .lrtemplate files and
-// .zip packs of either; writes .xmp that Lightroom can import. Parsing is plain text matching on purpose:
-// the files are untrusted, nothing in them is ever run or inserted as HTML, and every value is clamped.
-// shortcut: camera profiles (crs:Look, RGBTable), masks, lens and geometry settings are skipped and reported.
-import { BANDS, Band, Curves, Grade, Look, Preset, Pt, RANGES, Range, Tone3, clamp, cleanLook, curveTable } from './photoModel';
+// .zip packs of either; writes .xmp that Lightroom imports. Settings map one to one onto the editor (photoModel's
+// SPECS use the crs: names), so nothing is lost either way. Parsing is plain text matching on purpose: the files are
+// untrusted, nothing in them is ever run or inserted as HTML, and every value is validated and clamped.
+// shortcut: camera profiles other than Adobe Color/Monochrome, masks, lens profiles, Upright and healing are skipped and reported.
+import { CURVES, Dev, Preset, Pt, SPEC, SPECS, changed, cleanDev, fmt, legacyToDev } from './photoModel';
 
 type Settings = Record<string, string>;
 export interface Parsed { preset: Preset; skipped: string[] }
 
-const LR_BAND: Record<Band, string> = { red: 'Red', orange: 'Orange', yellow: 'Yellow', green: 'Green', aqua: 'Aqua', blue: 'Blue', purple: 'Purple', magenta: 'Magenta' };
-const LR_RANGE: Record<Range, string> = { shadows: 'Shadow', midtones: 'Midtone', highlights: 'Highlight', global: 'Global' };
-// Sliders that map one to one (Lightroom key, our key, scale).
-const DIRECT: [string, keyof Look['adj'], number][] = [
-  ['Contrast2012', 'contrast', 1], ['Highlights2012', 'highlights', 1], ['Shadows2012', 'shadows', 1],
-  ['Whites2012', 'whites', 1], ['Blacks2012', 'blacks', 1], ['Texture', 'texture', 1], ['Clarity2012', 'definition', 1],
-  ['Dehaze', 'dehaze', 1], ['Vibrance', 'vibrance', 1], ['Saturation', 'saturation', 1],
-  ['IncrementalTemperature', 'warmth', 1], ['IncrementalTint', 'tint', 1], ['LuminanceSmoothing', 'noiseReduction', 1],
-  ['PostCropVignetteAmount', 'vignette', -1], ['GrainAmount', 'grain', 1],
-];
-const EXPOSURE_EV = 1.5; // our Exposure at 100 is +1.5 stops (see adjust.ts)
-const IGNORED = /^(Version|ProcessVersion|PresetType|UUID|Cluster|Supports\w*|CameraModelRestriction|Copyright|ContactInfo|HasSettings|HasCrop|AlreadyApplied|Name|ShortName|SortName|Group|Description|Look|CameraProfile\w*|ToneCurveName\w*|WhiteBalance|Parametric\w*|SplitToning\w*|ColorGrade\w*|ConvertToGrayscale|Sharpen\w*|Sharpness|HueAdjustment\w*|SaturationAdjustment\w*|LuminanceAdjustment\w*|Temperature|Tint|Exposure2012|Exposure|Contrast|Highlights|Shadows|Brightness|Clarity|Grain\w*|PostCrop\w*|ColorNoiseReduction\w*|LuminanceNoiseReduction\w*|OverrideLookVignette|AutoLateralCA|ToneMapStrength|CompatibleVersion|RequiresRGBTables)$/;
-
 // Settings we do not model, named the way Lightroom's panels name them.
 const FRIENDLY: [RegExp, string][] = [
-  [/^(Lens|Perspective|Upright|Defringe|AutoLateral|VignetteAmount|VignetteMidpoint|ChromaticAberration)/, 'lens and geometry'],
-  [/^(Crop|HasCrop)/, 'crop'], [/^(GrayMixer|AutoGray)/, 'B&W mix'],
-  [/^(ShadowTint|RedHue|RedSaturation|GreenHue|GreenSaturation|BlueHue|BlueSaturation)$/, 'calibration'],
-  [/^(ColorNoise|LuminanceNoise|LuminanceSmoothing|Sharpen)/, 'detail'], [/^RGBTable|^Table_/, 'profile'],
+  [/^(LensProfile|AutoLateralCA|Defringe|ChromaticAberration|PerspectiveUpright|UprightVersion|UprightCenter|UprightFocal|UprightTransform|UprightFourSegments|UprightPreview|UprightGuided)/, 'lens profile and Upright'],
+  [/^(Crop|HasCrop)/, 'crop'], [/^(RGBTable|Table_|LookTable)/, 'profile'], [/^(Retouch|RedEye|SpotRemoval|CircularGradient|GradientBased|PaintBased|MaskGroup)/, 'masks and healing'],
+  [/^(EnhanceDetail|EnhanceDenoise|EnhanceSuperRes)/, 'AI Enhance'],
 ];
+const IGNORED = /^(Version|ProcessVersion|PresetType|UUID|Cluster|Supports\w*|CameraModelRestriction|Copyright|ContactInfo|HasSettings|AlreadyApplied|Name|ShortName|SortName|Group|Description|Look|CameraProfile\w*|ToneCurveName\w*|WhiteBalance|SplitToning\w*|ConvertToGrayscale|Exposure|ColorGradeShadowLum|CompatibleVersion|RequiresRGBTables|OverrideLookVignette|ToneMapStrength|AutoTone|AutoWhiteVersion|AutoGrayscaleMix|GrayMixer\w*|Brightness|Contrast|Shadows|Clarity|Highlights|Fill|HighlightRecovery|Smoothness|LuminanceAdjustment\w*|HueAdjustment\w*|SaturationAdjustment\w*|ColorGrade\w*|Temperature|Tint|SharpenEdgeMasking|Sharpness|Vignette\w*|Grain\w*|PostCrop\w*|Lens\w*Amount|Perspective\w*|ShadowTint|RedHue|RedSaturation|GreenHue|GreenSaturation|BlueHue|BlueSaturation|ColorNoise\w*|LuminanceNoise\w*|LuminanceSmoothing|DefringePurple\w*|DefringeGreen\w*|Texture|Dehaze|Vibrance|Saturation|Parametric\w*|Incremental\w*)$/;
+
 const decode = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, d) => String.fromCharCode(+d)).replace(/&amp;/g, '&');
 const encode = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const n = (v: string | undefined) => { const x = v === undefined ? NaN : Number(v.trim()); return Number.isFinite(x) ? x : undefined; };
 const newId = () => `x${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
-// Lightroom's parametric curve (Shadows, Darks, Lights, Highlights over three split points), folded into a point curve.
-const parametric = (s: Settings): Pt[] | null => {
-  const v = ['ParametricShadows', 'ParametricDarks', 'ParametricLights', 'ParametricHighlights'].map(k => n(s[k]) ?? 0);
-  if (v.every(x => x === 0)) return null;
-  const sp = [n(s.ParametricShadowSplit) ?? 25, n(s.ParametricMidtoneSplit) ?? 50, n(s.ParametricHighlightSplit) ?? 75].map(x => clamp(x, 5, 95) * 2.55);
-  const centres = [sp[0] / 2, (sp[0] + sp[1]) / 2, (sp[1] + sp[2]) / 2, (sp[2] + 255) / 2];
-  return [[0, 0], ...centres.map((x, i) => [x, clamp(x + v[i] * 0.45, 0, 255)] as Pt), [255, 255]];
-};
-const compose = (inner: Pt[], outer: Pt[] | undefined): Pt[] => {
-  const a = curveTable(inner), b = outer ? curveTable(outer) : null;
-  return Array.from({ length: 17 }, (_, i) => { const x = Math.min(255, i * 16); const y = a[x]; return [x, Math.round(b ? b[Math.round(y)] : y)] as Pt; });
-};
-
-// Turn Lightroom settings into a look.
-const fromSettings = (s: Settings, curves: Record<string, Pt[]>): { look: Look; skipped: string[] } => {
-  const adj: Look['adj'] = {};
-  const set = (k: keyof Look['adj'], v: number | undefined) => { if (v !== undefined && Math.round(v) !== 0) adj[k] = Math.round(v); };
-  const ev = n(s.Exposure2012) ?? n(s.Exposure);
-  set('exposure', ev === undefined ? undefined : clamp(ev / EXPOSURE_EV * 100, -100, 100));
-  for (const [lr, k, scale] of DIRECT) set(k, n(s[lr]) === undefined ? undefined : clamp(n(s[lr])! * scale, k === 'grain' || k === 'noiseReduction' ? 0 : -100, 100));
-  if (s.IncrementalTemperature === undefined && n(s.Temperature) !== undefined) set('warmth', clamp((n(s.Temperature)! - 5500) / 45, -100, 100));
-  if (s.IncrementalTint === undefined && n(s.Tint) !== undefined) set('tint', clamp(n(s.Tint)! / 1.5, -100, 100));
-  if (n(s.Sharpness) !== undefined) set('sharpness', clamp((n(s.Sharpness)! - 40) * 1.2, 0, 100));
-
-  const hsl: Look['hsl'] = {};
-  for (const b of BANDS) {
-    const v = ['HueAdjustment', 'SaturationAdjustment', 'LuminanceAdjustment'].map(p => clamp(n(s[p + LR_BAND[b]]) ?? 0, -100, 100)) as [number, number, number];
-    if (v.some(x => x)) hsl[b] = v;
+// Lightroom settings -> develop settings. Older keys (split toning, process 2010 names) fill in where the new ones are missing.
+const fromSettings = (s: Settings, curves: Record<string, Pt[]>, profile?: string): { dev: Dev; skipped: string[] } => {
+  const d: Record<string, unknown> = {};
+  for (const sp of SPECS) { const v = n(s[sp.key]); if (v !== undefined) d[sp.key] = v; }
+  if (d.Exposure2012 === undefined && n(s.Exposure) !== undefined) d.Exposure2012 = n(s.Exposure);
+  const fill = (k: string, from: string) => { if (d[k] === undefined && n(s[from]) !== undefined) d[k] = n(s[from]); };
+  fill('ColorGradeShadowHue', 'SplitToningShadowHue'); fill('ColorGradeShadowSat', 'SplitToningShadowSaturation');
+  fill('ColorGradeHighlightHue', 'SplitToningHighlightHue'); fill('ColorGradeHighlightSat', 'SplitToningHighlightSaturation');
+  if (n(s.Temperature) !== undefined) d.Temperature = n(s.Temperature);
+  if (n(s.Tint) !== undefined) d.Tint = n(s.Tint);
+  for (const k of CURVES) if (curves[k]) d[k] = curves[k];
+  if (!d.ToneCurvePV2012 && curves.ToneCurve) d.ToneCurvePV2012 = curves.ToneCurve;
+  if (/^true$/i.test(s.ConvertToGrayscale ?? '')) d.ConvertToGrayscale = true;
+  const skipped: string[] = [];
+  if (profile && !/^Adobe (Color|Standard|Monochrome)$/.test(profile)) skipped.push(`profile "${profile}"`);
+  if (profile === 'Adobe Monochrome') { d.ConvertToGrayscale = true; d.Profile = 'Monochrome'; }
+  for (const [k, v] of Object.entries(s)) {
+    if (SPEC[k] || /^(0|[+-]?0(\.0+)?|False|)$/i.test(v.trim())) continue;
+    const f = FRIENDLY.find(([re]) => re.test(k));
+    if (f) skipped.push(f[1]); else if (!IGNORED.test(k)) skipped.push('other settings');
   }
-
-  const curve: Curves = {};
-  const master = curves.ToneCurvePV2012 ?? curves.ToneCurve;
-  const para = parametric(s);
-  if (para) curve.rgb = compose(para, master); else if (master) curve.rgb = master;
-  if (curves.ToneCurvePV2012Red) curve.r = curves.ToneCurvePV2012Red;
-  if (curves.ToneCurvePV2012Green) curve.g = curves.ToneCurvePV2012Green;
-  if (curves.ToneCurvePV2012Blue) curve.b = curves.ToneCurvePV2012Blue;
-
-  const grade: Grade = {};
-  const tone = (h?: string, sat?: string, lum?: string): Tone3 => ({ h: clamp(n(h) ?? 0, 0, 360), s: clamp(n(sat) ?? 0, 0, 100), l: clamp(n(lum) ?? 0, -100, 100) });
-  grade.shadows = tone(s.SplitToningShadowHue ?? s.ColorGradeShadowHue, s.SplitToningShadowSaturation ?? s.ColorGradeShadowSat, s.ColorGradeShadowLum);
-  grade.highlights = tone(s.SplitToningHighlightHue ?? s.ColorGradeHighlightHue, s.SplitToningHighlightSaturation ?? s.ColorGradeHighlightSat, s.ColorGradeHighlightLum);
-  grade.midtones = tone(s.ColorGradeMidtoneHue, s.ColorGradeMidtoneSat, s.ColorGradeMidtoneLum);
-  grade.global = tone(s.ColorGradeGlobalHue, s.ColorGradeGlobalSat, s.ColorGradeGlobalLum);
-  if (n(s.ColorGradeBlending) !== undefined) grade.blending = n(s.ColorGradeBlending);
-  if (n(s.SplitToningBalance) !== undefined) grade.balance = n(s.SplitToningBalance);
-
-  const look = cleanLook({ adj, hsl, curve, grade, mono: /^true$/i.test(s.ConvertToGrayscale ?? '') });
-  const handled = new Set(DIRECT.map(d => d[0]));
-  const skipped = [...new Set(Object.entries(s)
-    .filter(([k, v]) => !IGNORED.test(k) && !handled.has(k) && !/^(0|\+?0(\.0+)?|False|)$/i.test(v.trim()))
-    .map(([k]) => FRIENDLY.find(([re]) => re.test(k))?.[1] ?? 'other settings'))];
-  return { look, skipped };
+  return { dev: cleanDev(d), skipped: [...new Set(skipped)] };
 };
 
 // --- .xmp ------------------------------------------------------------------
@@ -97,30 +55,26 @@ const altText = (xml: string, tag: string) => {
 
 export const parseXmp = (text: string, fallbackName = 'Imported preset'): Parsed | null => {
   if (!/crs:|xmlns:crs/.test(text)) return null;
-  const profile = /<crs:Look>[\s\S]*?crs:Name="([^"]*)"/.exec(text)?.[1];
-  const xml = text.replace(/<crs:Look>[\s\S]*?<\/crs:Look>/g, '').replace(/<crs:MaskGroupBasedCorrections>[\s\S]*?<\/crs:MaskGroupBasedCorrections>/g, ' MASKS ');
-  const ours = /sc:Look="([^"]*)"/.exec(xml);
+  const profile = /<crs:Look>[\s\S]*?crs:Name="([^"]*)"/.exec(text)?.[1] ?? /<crs:Look>[\s\S]*?<crs:Name>([^<]*)</.exec(text)?.[1];
+  const masks = /<crs:(MaskGroupBasedCorrections|GradientBasedCorrections|CircularGradientBasedCorrections|PaintBasedCorrections|RetouchInfo)>/.test(text);
+  const xml = text.replace(/<crs:Look>[\s\S]*?<\/crs:Look>/g, '')
+    .replace(/<crs:(MaskGroupBasedCorrections|GradientBasedCorrections|CircularGradientBasedCorrections|PaintBasedCorrections|RetouchInfo|RetouchAreas)>[\s\S]*?<\/crs:\1>/g, '');
   const name = altText(xml, 'Name') || fallbackName;
   const group = altText(xml, 'Group');
-  const skipped: string[] = [];
-  let look: Look;
-  if (ours) { // written by SimplyCanva: the exact look rides along
-    try { look = cleanLook(JSON.parse(decode(ours[1]))); } catch { look = { adj: {} }; }
-  } else {
-    const s: Settings = {};
-    for (const m of xml.matchAll(/crs:(\w+)="([^"]*)"/g)) s[m[1]] = decode(m[2]);
-    for (const m of xml.matchAll(/<crs:(\w+)>([^<]*)<\/crs:\1>/g)) s[m[1]] = decode(m[2]);
-    const curves: Record<string, Pt[]> = {};
-    for (const m of xml.matchAll(/<crs:(ToneCurve(?:PV2012)?(?:Red|Green|Blue)?)>\s*<rdf:Seq>([\s\S]*?)<\/rdf:Seq>/g)) {
-      const pts = [...m[2].matchAll(/<rdf:li>\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*<\/rdf:li>/g)].map(p => [Number(p[1]), Number(p[2])] as Pt);
-      if (pts.length >= 2) curves[m[1]] = pts;
-    }
-    const r = fromSettings(s, curves);
-    look = r.look; skipped.push(...r.skipped);
+  const s: Settings = {};
+  for (const m of xml.matchAll(/crs:(\w+)="([^"]*)"/g)) s[m[1]] = decode(m[2]);
+  for (const m of xml.matchAll(/<crs:(\w+)>([^<]*)<\/crs:\1>/g)) s[m[1]] = decode(m[2]);
+  const curves: Record<string, Pt[]> = {};
+  for (const m of xml.matchAll(/<crs:(ToneCurve(?:PV2012)?(?:Red|Green|Blue)?)>\s*<rdf:Seq>([\s\S]*?)<\/rdf:Seq>/g)) {
+    const pts = [...m[2].matchAll(/<rdf:li>\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*<\/rdf:li>/g)].map(p => [Number(p[1]), Number(p[2])] as Pt);
+    if (pts.length >= 2) curves[m[1]] = pts;
   }
-  if (profile) skipped.unshift(`profile "${profile}"`);
-  if (/ MASKS /.test(xml)) skipped.unshift('masks');
-  return { preset: { id: newId(), name: name.slice(0, 80), ...(group ? { group: group.slice(0, 60) } : {}), ...look }, skipped };
+  // Exports from SimplyCanva before Lightroom settings carried their own look; use it when there is nothing else.
+  const ours = /sc:Look="([^"]*)"/.exec(xml);
+  let r = fromSettings(s, curves, profile);
+  if (ours && !Object.keys(s).some(k => SPEC[k])) { try { r = { dev: legacyToDev(JSON.parse(decode(ours[1]))), skipped: [] }; } catch { /* keep crs values */ } }
+  if (masks) r.skipped.unshift('masks and healing');
+  return { preset: { id: newId(), name: name.slice(0, 80), ...(group ? { group: group.slice(0, 60) } : {}), dev: r.dev }, skipped: [...new Set(r.skipped)] };
 };
 
 // --- .lrtemplate (Lightroom Classic before 7.3) ----------------------------------
@@ -140,45 +94,28 @@ export const parseLrTemplate = (text: string, fallbackName = 'Imported preset'):
   for (const m of body.matchAll(/(\w+)\s*=\s*(-?[\d.]+|true|false)\s*,/g)) s[m[1]] = m[2];
   const name = /internalName\s*=\s*"([^"]*)"/.exec(text)?.[1] || /title\s*=\s*ZSTR\s*"[^=]*=([^"]*)"/.exec(text)?.[1] || fallbackName;
   const r = fromSettings(s, curves);
-  return { preset: { id: newId(), name: name.slice(0, 80), ...r.look }, skipped: r.skipped };
+  return { preset: { id: newId(), name: name.slice(0, 80), dev: r.dev }, skipped: r.skipped };
 };
 
 // --- writing .xmp ------------------------------------------------------------
-const f2 = (v: number) => (v > 0 ? '+' : '') + v.toFixed(2);
-const i0 = (v: number) => (v > 0 ? '+' : '') + Math.round(v);
 const uuid = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-export const NOT_IN_LIGHTROOM: (keyof Look['adj'])[] = ['brilliance', 'brightness', 'blackPoint'];
 
 export const toXmp = (p: Preset): string => {
-  const a = p.adj, attrs: Record<string, string> = {};
-  if (a.exposure) attrs.Exposure2012 = f2(a.exposure / 100 * EXPOSURE_EV);
-  for (const [lr, k, scale] of DIRECT) if (a[k]) attrs[lr] = i0(a[k]! * scale);
-  if (a.grain) { attrs.GrainSize = '25'; attrs.GrainFrequency = '50'; }
-  if (a.sharpness) attrs.Sharpness = String(Math.round(40 + a.sharpness / 1.2));
-  for (const b of BANDS) {
-    const v = p.hsl?.[b];
-    if (v) ['HueAdjustment', 'SaturationAdjustment', 'LuminanceAdjustment'].forEach((k, i) => { if (v[i]) attrs[k + LR_BAND[b]] = i0(v[i]); });
-  }
-  for (const r of RANGES) {
-    const t = p.grade?.[r];
-    if (!t) continue;
-    attrs[`ColorGrade${LR_RANGE[r]}Hue`] = String(Math.round(t.h));
-    attrs[`ColorGrade${LR_RANGE[r]}Sat`] = String(Math.round(t.s));
-    attrs[`ColorGrade${LR_RANGE[r]}Lum`] = i0(t.l);
-  }
-  if (p.grade?.shadows) { attrs.SplitToningShadowHue = String(Math.round(p.grade.shadows.h)); attrs.SplitToningShadowSaturation = String(Math.round(p.grade.shadows.s)); }
-  if (p.grade?.highlights) { attrs.SplitToningHighlightHue = String(Math.round(p.grade.highlights.h)); attrs.SplitToningHighlightSaturation = String(Math.round(p.grade.highlights.s)); }
-  if (p.grade) { attrs.ColorGradeBlending = String(Math.round(p.grade.blending ?? 50)); attrs.SplitToningBalance = i0(p.grade.balance ?? 0); }
-  if (p.mono) attrs.ConvertToGrayscale = 'True';
-
+  const d = p.dev, attrs: Record<string, string> = {};
+  for (const k of changed(d)) if (SPEC[k]) attrs[k] = k === 'SharpenRadius' ? `+${(d[k] as number).toFixed(1)}` : fmt(k, d[k] as number); // Lightroom writes the radius signed
+  if (d.ConvertToGrayscale || d.Profile === 'Monochrome') attrs.ConvertToGrayscale = 'True';
+  if (typeof d.Temperature === 'number') attrs.Temperature = String(Math.round(d.Temperature));
+  if (typeof d.Tint === 'number') attrs.Tint = fmt('IncrementalTint', d.Tint);
+  // Lightroom versions before colour grading read split toning: write both.
+  if (attrs.ColorGradeShadowHue || attrs.ColorGradeShadowSat) { attrs.SplitToningShadowHue = String(Math.round(d.ColorGradeShadowHue as number ?? 0)); attrs.SplitToningShadowSaturation = String(Math.round(d.ColorGradeShadowSat as number ?? 0)); }
+  if (attrs.ColorGradeHighlightHue || attrs.ColorGradeHighlightSat) { attrs.SplitToningHighlightHue = String(Math.round(d.ColorGradeHighlightHue as number ?? 0)); attrs.SplitToningHighlightSaturation = String(Math.round(d.ColorGradeHighlightSat as number ?? 0)); }
+  if (Object.keys(attrs).some(k => k.startsWith('ToneCurve')) || CURVES.some(k => d[k])) attrs.ToneCurveName2012 = 'Custom';
   const seq = (tag: string, pts?: Pt[]) => (pts ? `\n   <crs:${tag}>\n    <rdf:Seq>\n${pts.map(([x, y]) => `     <rdf:li>${Math.round(x)}, ${Math.round(y)}</rdf:li>`).join('\n')}\n    </rdf:Seq>\n   </crs:${tag}>` : '');
   const alt = (tag: string, v: string) => `\n   <crs:${tag}>\n    <rdf:Alt>\n     <rdf:li xml:lang="x-default">${encode(v)}</rdf:li>\n    </rdf:Alt>\n   </crs:${tag}>`;
-  const { id: _id, name, group, ...look } = p;
   return `<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="SimplyCanva">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about=""
     xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
-    xmlns:sc="https://github.com/pzhub-67/SimplyCanva/ns/look/1.0/"
    crs:PresetType="Normal"
    crs:Cluster=""
    crs:UUID="${uuid()}"
@@ -195,8 +132,7 @@ export const toXmp = (p: Preset): string => {
    crs:Version="15.0"
    crs:ProcessVersion="11.0"
 ${Object.entries(attrs).map(([k, v]) => `   crs:${k}="${v}"`).join('\n')}
-   crs:HasSettings="True"
-   sc:Look="${encode(JSON.stringify(look))}">${alt('Name', name)}${alt('ShortName', '')}${alt('SortName', '')}${alt('Group', group ?? 'SimplyCanva')}${alt('Description', '')}${seq('ToneCurvePV2012', p.curve?.rgb)}${seq('ToneCurvePV2012Red', p.curve?.r)}${seq('ToneCurvePV2012Green', p.curve?.g)}${seq('ToneCurvePV2012Blue', p.curve?.b)}
+   crs:HasSettings="True">${alt('Name', p.name)}${alt('ShortName', '')}${alt('SortName', '')}${alt('Group', p.group ?? 'SimplyCanva')}${alt('Description', '')}${CURVES.map(k => seq(k, d[k] as Pt[] | undefined)).join('')}
   </rdf:Description>
  </rdf:RDF>
 </x:xmpmeta>
