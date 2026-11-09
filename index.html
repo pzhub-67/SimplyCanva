@@ -35,6 +35,13 @@
       color-scheme: dark;
     }
   }
+  /* Photo work is dark, like Lightroom: the library and the photo editor always use the dark tokens. */
+  body[data-editing], #library {
+    --ground: #0d0f0f; --well: #050606; --surface: #161918; --raised: #1c201f; --active: #262b2a;
+    --border: #262b2a; --rule: #1d2120; --control: #434a48; --ink: #f2f5f4; --muted: #a9b2b0;
+    --primary: #f2f5f4; --primary-ink: #0d0f0f; --accent: #3cc3b9; --scrim: rgb(0 0 0 / .6);
+    color-scheme: dark;
+  }
   :root[data-theme="dark"] {
     --ground: #0d0f0f; --well: #050606; --surface: #161918; --raised: #1c201f; --active: #262b2a;
     --border: #262b2a; --rule: #1d2120; --control: #434a48; --ink: #f2f5f4; --muted: #a9b2b0;
@@ -206,7 +213,7 @@
   #ed-compare { background: var(--raised); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   .ed-head .btn { flex: 1; }
   .ed-tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; border-top: 1px solid var(--rule); }
-  .ed-tabs .tool { min-width: 0; min-height: 44px; padding: 4px 2px; font-size: 13px; color: var(--muted); border-radius: 0; }
+  .ed-tabs .tool { min-width: 0; min-height: 52px; padding: 4px 2px; font-size: 12px; color: var(--muted); border-radius: 0; }
   .ed-tabs .tool[aria-pressed="true"] { background: none; color: var(--ink); border-top: 2px solid var(--accent); }
   .ed-body { height: min(40vh, 340px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
   .ed-body > div { display: flex; flex-direction: column; gap: 6px; }
@@ -228,6 +235,32 @@
   .hue input[type=range] { accent-color: var(--ink); background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); border-radius: 999px; height: 10px; appearance: none; -webkit-appearance: none; }
   .hue input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); }
   .hue input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); }
+  .lib { display: block; overflow: auto; background: var(--ground); color: var(--ink); padding: 0; }
+  .lib-in { width: min(100%, 1280px); margin: 0 auto; padding: max(8px, env(safe-area-inset-top, 0px)) 12px 120px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; }
+  .lib-bar { display: flex; align-items: center; gap: 8px; min-height: 52px; }
+  .lib-bar h1 { flex: 1; font: 600 22px var(--font-ui); letter-spacing: -0.01em; }
+  .lib-tools { display: flex; align-items: center; gap: 8px; }
+  .lib-tools .muted { flex: 1; margin: 0; font-variant-numeric: tabular-nums; }
+  .seg3 { display: flex; gap: 4px; }
+  .seg3 .chip { min-height: 36px; padding: 6px 12px; }
+  .lgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(31vw, 150px), 1fr)); gap: 3px; }
+  .lcell { position: relative; aspect-ratio: 1; padding: 0; border: 0; background: var(--raised); cursor: pointer; overflow: hidden; -webkit-touch-callout: none; user-select: none; }
+  .lcell img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+  .lcell .flag { position: absolute; left: 6px; top: 4px; color: #fff; font-size: 15px; text-shadow: 0 1px 2px rgb(0 0 0 / .6); }
+  .lcell .dot { position: absolute; right: 6px; bottom: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); outline: 2px solid rgb(0 0 0 / .4); }
+  .lcell[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: -3px; }
+  .lcell[aria-pressed="true"] img { opacity: .75; }
+  .lcell[aria-pressed]::after { content: ""; position: absolute; right: 6px; top: 6px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; box-sizing: border-box; background: rgb(0 0 0 / .25); }
+  .lcell[aria-pressed="true"]::after { background: var(--accent); }
+  .lib-empty { padding: 48px 8px; max-width: 460px; }
+  .lib-empty h2 { font: 600 20px var(--font-ui); margin-bottom: 8px; }
+  .lib-empty p { color: var(--muted); margin: 0; }
+  .lib-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; overflow-x: auto; gap: 2px; padding: 6px 8px max(6px, env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--border); scrollbar-width: none; }
+  .lib-actions .tool { flex: none; min-width: 64px; font-size: 13px; }
+  .lib-sheet { position: fixed; left: 8px; right: 8px; bottom: 72px; max-height: 70vh; overflow: auto; z-index: 3; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sheet); padding: 8px 16px 16px; box-shadow: 0 12px 32px rgb(0 0 0 / .4); /* floats over the grid */ }
+  .lib-sheet .opt { min-height: 44px; }
+  @media (min-width: 960px) { .lib-sheet { left: auto; right: 16px; top: 16px; bottom: 80px; width: 380px; max-height: none; } .lib-in { padding-inline: 24px; } }
+  .ed-tabs .tool svg { width: 20px; height: 20px; }
   #curve-box { display: flex; flex-direction: column; gap: 6px; }
   #curve { width: min(100%, 300px); aspect-ratio: 1; align-self: center; touch-action: none; border-radius: var(--radius-control); background: var(--well); cursor: crosshair; }
   #filters .chip.th { min-width: 76px; }
@@ -286,6 +319,7 @@
   <header id="top">
     <button class="mark" data-act="home" aria-label="Home: my designs and new design"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg><svg class="logo" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="2" width="24" height="24" rx="6" fill="var(--accent)"/><rect x="7" y="7" width="14" height="14" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="2.2" fill="#fff"/><path d="M10 17.5h8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></button>
     <h1 id="doc-title">Untitled design</h1>
+    <button class="tool icon" data-act="library" aria-label="Photo library"><span data-icon="photos"></span></button>
     <button class="tool icon" id="undo" data-act="undo" aria-label="Undo" disabled><span data-icon="undo"></span></button>
     <button class="tool icon" id="redo" data-act="redo" aria-label="Redo" disabled><span data-icon="redo"></span></button>
     <span class="divider"></span>
@@ -410,15 +444,16 @@
   <section id="editor" class="bar" aria-label="Photo editor" hidden>
     <div class="ed-head">
       <button class="tool" id="ed-cancel">Cancel</button>
-      <button class="tool" id="ed-compare" aria-label="Hold to compare with the original">Hold to compare</button>
+      <button class="tool" id="ed-compare" aria-label="Hold to compare with the original">Compare</button>
       <button class="tool" id="ed-revert">Revert</button>
+      <button class="tool" id="ed-save" aria-label="Save a full-size JPG" hidden>Save</button>
       <button class="btn" id="ed-done">Done</button>
     </div>
     <div class="ed-body">
     <div data-ed-panel="presets" hidden>
       <div class="ed-row">
         <select id="pgroup" aria-label="Preset group"></select>
-        <label class="btn quiet file-btn">Import<input id="pimport" type="file" accept=".xmp,.lrtemplate,.zip,application/zip" multiple aria-label="Import Lightroom presets (.xmp, .lrtemplate or .zip)"></label>
+        <label class="btn quiet file-btn">Import<input id="pimport" type="file" multiple aria-label="Import Lightroom presets (.xmp, .lrtemplate or .zip)"></label>
         <button class="btn quiet" id="pmanage-btn" aria-expanded="false">Manage</button>
       </div>
       <div id="filters" class="dial"></div>
@@ -479,20 +514,61 @@
     </div>
     </div>
     <div class="ed-tabs">
-      <button class="tool" data-ed-tab="presets" aria-pressed="false">Presets</button>
-      <button class="tool" data-ed-tab="crop" aria-pressed="false">Crop</button>
-      <button class="tool" data-ed-tab="light" aria-pressed="true">Light</button>
-      <button class="tool" data-ed-tab="color" aria-pressed="false">Color</button>
-      <button class="tool" data-ed-tab="effects" aria-pressed="false">Effects</button>
-      <button class="tool" data-ed-tab="detail" aria-pressed="false">Detail</button>
+      <button class="tool" data-ed-tab="presets" aria-pressed="false"><span data-icon="ed-presets"></span>Presets</button>
+      <button class="tool" data-ed-tab="crop" aria-pressed="false"><span data-icon="ed-crop"></span>Crop</button>
+      <button class="tool" data-ed-tab="light" aria-pressed="true"><span data-icon="ed-light"></span>Light</button>
+      <button class="tool" data-ed-tab="color" aria-pressed="false"><span data-icon="ed-color"></span>Color</button>
+      <button class="tool" data-ed-tab="effects" aria-pressed="false"><span data-icon="ed-effects"></span>Effects</button>
+      <button class="tool" data-ed-tab="detail" aria-pressed="false"><span data-icon="ed-detail"></span>Detail</button>
     </div>
   </section>
   <input id="img" type="file" accept="image/*" multiple hidden>
+
+  <div id="library" class="overlay lib" hidden>
+    <div class="lib-in">
+      <div class="lib-bar">
+        <button id="lib-back" class="tool icon" aria-label="Back to designs"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
+        <h1>Photos</h1>
+        <button id="lib-presets" class="btn quiet">Presets</button>
+        <label class="btn file-btn">Add photos<input id="lib-add" type="file" accept="image/*" multiple aria-label="Add photos"></label>
+      </div>
+      <div class="lib-tools">
+        <div class="seg3"><button class="chip" data-lib-filter="all">All</button><button class="chip" data-lib-filter="picks">Flagged</button><button class="chip" data-lib-filter="edited">Edited</button></div>
+        <span id="lib-count" class="muted"></span>
+        <button id="lib-select" class="tool">Select</button>
+      </div>
+      <div id="lib-grid" class="lgrid"></div>
+      <div id="lib-empty" class="lib-empty" hidden>
+        <h2>Your photo library</h2>
+        <p>Add photos to edit them with Light, Color, Effects, Detail, curves and your Lightroom presets. They stay on this device.</p>
+      </div>
+      <p id="lib-empty-filter" class="muted" hidden>No photos match this filter.</p>
+    </div>
+    <div id="lib-sheet" class="lib-sheet" hidden>
+      <div class="sheet-head"><h2 id="lib-sheet-h">Presets</h2><button id="lib-sheet-close" class="btn quiet">Close</button></div>
+      <div id="lib-sheet-tools" class="ed-row">
+        <label class="btn file-btn">Import presets<input id="lib-pimport" type="file" multiple aria-label="Import Lightroom presets (.xmp, .lrtemplate or .zip)"></label>
+        <button id="lib-pexport" class="btn quiet">Export all</button>
+      </div>
+      <div id="lib-sheet-list" class="list"></div>
+    </div>
+    <div id="lib-actions" class="lib-actions" hidden>
+      <button class="tool" data-lib-act="all">All</button>
+      <button class="tool" id="lib-pick" data-lib-act="pick">Flag</button>
+      <button class="tool" data-lib-act="preset">Preset</button>
+      <button class="tool" data-lib-act="copy">Copy</button>
+      <button class="tool" data-lib-act="paste">Paste</button>
+      <button class="tool" data-lib-act="save">Save JPG</button>
+      <button class="tool" data-lib-act="design">To design</button>
+      <button class="tool" id="lib-del" data-lib-act="del">Delete</button>
+    </div>
+  </div>
 
   <div id="home" class="overlay home" hidden>
     <div class="home-in">
       <div class="home-bar">
         <span class="wordmark"><svg class="logo" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="2" width="24" height="24" rx="6" fill="var(--accent)"/><rect x="7" y="7" width="14" height="14" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="2.2" fill="#fff"/><path d="M10 17.5h8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>SimplyCanva</span>
+        <button class="btn quiet" data-act="library">Photos</button>
         <button id="acct-btn" class="btn quiet" aria-label="Profiles"></button>
         <button id="home-back" class="btn" data-act="continue" hidden>Back to editor</button>
       </div>

@@ -1,5 +1,12 @@
 // 24px stroke icons, inner SVG markup only.
 export const ICONS: Record<string, string> = {
+  photos: '<rect x="3" y="5" width="15" height="13" rx="2"/><path d="M7 2h12a2 2 0 0 1 2 2v11M3 15l4-4 4 4 3-3 4 4"/>',
+  'ed-presets': '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/>',
+  'ed-crop': '<path d="M6 2v16h16M2 6h16v16"/>',
+  'ed-light': '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  'ed-color': '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
+  'ed-effects': '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="5"/>',
+  'ed-detail': '<path d="M12 3 3 20h18L12 3z"/><path d="M12 10v5"/>',
   undo: '<path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/>',
   redo: '<path d="m15 14 5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/>',
   home: '<path d="M3 11 12 4l9 7M5 10v10h14V10"/>',

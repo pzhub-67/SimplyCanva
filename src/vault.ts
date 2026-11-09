@@ -34,3 +34,14 @@ export const sealText = async (value: unknown, k: CryptoKey | null = key) => { c
 export const openText = async <T>(s: string, k: CryptoKey | null = key): Promise<T> => { const [, iv, data] = s.split(':'); return open<T>({ iv: unb64(iv), data: unb64(data) }, k); };
 export const isSealedText = (s: string | null): s is string => !!s && s.startsWith('enc1:');
 export const isSealed = (r: unknown): r is { id: string; enc: Enc } => !!r && typeof r === 'object' && 'enc' in (r as object);
+
+// Raw bytes (photos): same AES-GCM key, no JSON or base64 detour.
+export const sealBytes = async (bytes: ArrayBuffer, k: CryptoKey | null = key): Promise<Enc> => {
+  if (!k) throw new Error('locked');
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  return { iv, data: new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, bytes)) };
+};
+export const openBytes = async (e: Enc, k: CryptoKey | null = key): Promise<ArrayBuffer> => {
+  if (!k) throw new Error('locked');
+  return crypto.subtle.decrypt({ name: 'AES-GCM', iv: e.iv as BufferSource }, k, e.data as BufferSource);
+};

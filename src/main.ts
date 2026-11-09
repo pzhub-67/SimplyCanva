@@ -1,5 +1,8 @@
 import { fabric } from 'fabric';
-import { PhotoImage, addPresets, getPresets, initEditor, loadPresets } from './editor';
+import { PhotoImage, addPresets, allPresets, applyEdit, getPresets, initEditor, loadPresets } from './editor';
+import { PhotoRec, THUMB_PX, blobUrl, exportJpeg, getFile, putPhoto } from './library';
+import { initLibrary } from './libraryView';
+import { renderCropped } from './crop';
 import { FONTS, loadFont } from './fonts';
 import { ICONS, svg } from './icons';
 import { Design, FabricJSON, Page, fabricToPage, newDesign, pageToFabric } from './model';
@@ -936,7 +939,82 @@ const exportAll = async () => {
 };
 
 // --- wiring ----------------------------------------------------------------
-const editor = initEditor({ c, commit: snap, toast, pageRatio: () => logical.w / logical.h });
+const editor = initEditor({
+  c, toast, pageRatio: () => logical.w / logical.h,
+  commit: () => { if (!photo) snap(); },
+  onGeometry: img => { if (photo) { img.set({ left: 0, top: 0 }); img.setCoords(); logical = { w: img.getScaledWidth(), h: img.getScaledHeight() }; resetView(); } },
+  onClose: (img, saved) => { if (photo) void leavePhoto(img, saved); },
+});
+
+// --- photo library ------------------------------------------------------------------
+// Editing a library photo borrows the stage: the open design is saved and set aside, the photo becomes the "page",
+// and the same editor runs on it. Done writes the edit back to the library; the design comes back untouched.
+let photo: PhotoRec | null = null;
+const clone = <T,>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
+const photoImage = async (rec: PhotoRec) => { // the working copy as a fabric image carrying its edit (crop baked in)
+  const prev = await blobUrl(await getFile(rec.id, 'preview'));
+  const src = rec.edit?.crop ? await renderCropped(prev, rec.edit.crop) : prev;
+  const img = await new Promise<PhotoImage>((res, rej) => fabric.Image.fromURL(src, im => (im?.width ? res(im as PhotoImage) : rej(new Error('load')))));
+  img.edit = clone(rec.edit);
+  if (rec.edit?.crop) img.orig = { src: prev };
+  return img;
+};
+const openPhoto = async (rec: PhotoRec) => {
+  if (live) { clearTimeout(saveTimer); await save(); }
+  let img: PhotoImage;
+  try { img = await photoImage(rec); } catch { toast('That photo could not be opened.'); return; }
+  live = false; photo = rec;
+  busy = true; c.clear(); busy = false;
+  img.set({ left: 0, top: 0 });
+  logical = { w: img.width!, h: img.height! };
+  busy = true; c.add(img); busy = false;
+  document.body.dataset.photo = '1';
+  $('ed-save').hidden = false;
+  lib.hide();
+  resetView(); applyEdit(img, img.edit); editor.open(img);
+};
+const leavePhoto = async (img: PhotoImage, saved: boolean) => {
+  const rec = photo!;
+  if (saved) {
+    rec.edit = img.edit ? clone(img.edit) : undefined;
+    rec.updated = Date.now();
+    const el = img.getElement() as unknown as HTMLCanvasElement, k = Math.min(1, THUMB_PX / Math.max(el.width, el.height));
+    const th = Object.assign(document.createElement('canvas'), { width: Math.round(el.width * k), height: Math.round(el.height * k) });
+    th.getContext('2d')!.drawImage(el, 0, 0, th.width, th.height);
+    rec.thumb = th.toDataURL('image/jpeg', 0.78);
+    try { await putPhoto(rec); } catch { toast('Could not save the edit: storage is full or blocked.'); }
+  }
+  photo = null;
+  delete document.body.dataset.photo;
+  $('ed-save').hidden = true;
+  showPage(pageIdx); // the design that was open, as it was saved
+  await lib.show();
+};
+$('ed-save').onclick = async () => {
+  if (!photo) return;
+  toast('Rendering full size…');
+  try {
+    const r = await saveFile(`${photo.name.replace(/[^\w\- ]+/g, '').trim() || 'photo'}.jpg`, await exportJpeg(photo, allPresets(), editor.work()));
+    toast(r === 'saved' ? 'Saved.' : r === 'declined' ? 'Not saved.' : 'Saving files is not available here.');
+  } catch (e) { console.error('render', e); toast('Could not render that photo.'); }
+};
+// Put library photos into the open design, still editable (their edit and crop come along).
+const addToDesign = async (recs: PhotoRec[]) => {
+  for (const rec of recs) {
+    try {
+      const img = await photoImage(rec);
+      img.scale(Math.min((logical.w * 0.6) / (img.width ?? 1), (logical.h * 0.6) / (img.height ?? 1)));
+      applyEdit(img, img.edit);
+      place(img);
+    } catch { toast('A photo could not be added.'); }
+  }
+};
+const lib = initLibrary({
+  open: rec => void openPhoto(rec),
+  addToDesign: recs => void addToDesign(recs),
+  toast,
+  back: () => { $('home').hidden = true; },
+});
 const images = () => c.getActiveObjects().filter((o): o is PhotoImage => o.type === 'image');
 c.on('mouse:dblclick', e => { if (e.target?.type === 'image') editor.open(e.target as PhotoImage); });
 
@@ -948,6 +1026,7 @@ const actions: Record<string, () => void> = {
   copyEdits: () => { const [img] = images(); if (img) editor.copyEdits(img); },
   pasteEdits: () => editor.pasteEdits(images()),
   continue: () => { $('home').hidden = true; },
+  library: () => { $('home').hidden = true; closeSheet(); void lib.show(); },
   closeExport: () => { $('export').hidden = true; },
   closeAccounts: () => { $('accounts').hidden = true; },
   forward: () => order(1), backward: () => order(-1),
@@ -970,7 +1049,7 @@ all('[data-tab]').forEach(b => {
 addEventListener('keydown', e => {
   const t = e.target;
   if (t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement) return;
-  if (textObj()?.isEditing || editor.isOpen()) return;
+  if (textObj()?.isEditing || editor.isOpen() || lib.isOpen()) return;
   const mod = e.ctrlKey || e.metaKey;
   const k = e.key.toLowerCase();
   if (k === 'delete' || k === 'backspace') del();
@@ -1002,4 +1081,5 @@ void (async () => {
   let d = id ? await getDesign(id) : undefined;
   if (!d) { const m = (await listMeta())[0]; if (m) d = await getDesign(m.id); }
   if (d) loadDesign(d); else startNew(1080, 1080);
+  if ((() => { try { return localStorage.getItem('canva-lite:view') === 'photos'; } catch { return false; } })()) void lib.show(); // reopen where you left off
 })();

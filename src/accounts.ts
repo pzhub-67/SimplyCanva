@@ -66,7 +66,7 @@ export const renameProfile = (id: string, name: string) => { const l = profiles(
 export const deleteProfile = async (id: string) => {
   const l = profiles();
   if (l.length < 2) return false;
-  await new Promise<void>(res => { try { const r = indexedDB.deleteDatabase(dbNameOf(id)); r.onsuccess = r.onerror = r.onblocked = () => res(); } catch { res(); } });
+  for (const n of [dbNameOf(id), `${dbNameOf(id)}-photos`]) await new Promise<void>(res => { try { const r = indexedDB.deleteDatabase(n); r.onsuccess = r.onerror = r.onblocked = () => res(); } catch { res(); } });
   const sfx = id === 'local' ? '' : `:${id}`;
   ['canva-lite:presets', 'canva-lite:brand', 'canva-lite:last'].forEach(k => { try { localStorage.removeItem(k + sfx); } catch { /* ignore */ } });
   saveProfiles(l.filter(p => p.id !== id));

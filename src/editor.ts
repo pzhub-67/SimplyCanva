@@ -4,6 +4,7 @@
 import { fabric } from 'fabric';
 import { scope } from './accounts';
 import { readSecure, writeSecure } from './secure';
+import { loadPresetList, savePresetList } from './library';
 import { makeAdjustFilter } from './adjust';
 import { initCropper, renderCropped } from './crop';
 import { saveFile } from './download';
@@ -15,7 +16,11 @@ import {
 
 // `orig` holds the untouched photo once a crop has been applied, so the crop can be re-edited or undone.
 export type PhotoImage = fabric.Image & { edit?: PhotoEdit; orig?: { src: string } };
-interface Deps { c: fabric.Canvas; commit: () => void; toast: (msg: string) => void; pageRatio: () => number }
+interface Deps {
+  c: fabric.Canvas; commit: () => void; toast: (msg: string) => void; pageRatio: () => number;
+  onGeometry?: (img: PhotoImage) => void; // the photo's pixels changed size (crop applied or removed)
+  onClose?: (img: PhotoImage, saved: boolean) => void;
+}
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const all = <T extends HTMLElement = HTMLElement>(sel: string) => [...document.querySelectorAll<T>(sel)];
@@ -25,10 +30,24 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string,
 // --- your presets (imported and saved), encrypted with the profile ------------------
 const PKEY = () => scope('canva-lite:presets');
 let mine: Preset[] = [];
-export const loadPresets = async () => { const v = await readSecure<unknown>(PKEY(), []); mine = Array.isArray(v) ? v.map(cleanPreset).filter((p): p is Preset => !!p) : []; };
+// Presets live in the photo library's database. Older copies in localStorage move over once.
+export const loadPresets = async () => {
+  let v: unknown = await loadPresetList().catch(() => null);
+  if (v === null) {
+    v = await readSecure<unknown>(PKEY(), []);
+    if (Array.isArray(v) && v.length && await savePresetList(v).catch(() => false)) { try { localStorage.removeItem(PKEY()); } catch { /* ignore */ } }
+  }
+  mine = Array.isArray(v) ? v.map(cleanPreset).filter((p): p is Preset => !!p) : [];
+};
 export const getPresets = () => mine;
 export const addPresets = (l: unknown[]) => { for (const p of l.map(cleanPreset)) if (p && !mine.some(x => x.id === p.id)) mine.push(p); saveMine(); };
-const saveMine = () => { void writeSecure(PKEY(), mine); };
+let saveFail: ((m: string) => void) | null = null;
+const saveMine = () => {
+  void savePresetList(mine).then(ok => { if (!ok) return writeSecure(PKEY(), mine); }).catch(() => saveFail?.('Could not save presets: storage is full or blocked.'));
+};
+export const setPresets = (l: Preset[]) => { mine = l; saveMine(); };
+export const presetGroupOf = (p: Preset) => groupOf(p);
+export { allPresets };
 const allPresets = () => BUILTIN.concat(mine);
 const BUILT_IN = 'Built-in', YOURS = 'Your presets';
 const groupOf = (p: Preset) => (BUILTIN.includes(p) ? BUILT_IN : p.group || YOURS);
@@ -76,7 +95,8 @@ const BAND_COLOR: Record<Band, string> = { red: '#e5372f', orange: '#f08a24', ye
 const RANGE_LABEL: Record<Range, string> = { shadows: 'Shadows', midtones: 'Midtones', highlights: 'Highlights', global: 'Global' };
 const CH_COLOR: Record<Channel, string> = { rgb: '', r: '#e5372f', g: '#3fae49', b: '#2f6fe0' };
 
-export function initEditor({ c, commit, toast, pageRatio }: Deps) {
+export function initEditor({ c, commit, toast, pageRatio, onGeometry, onClose }: Deps) {
+  saveFail = toast;
   const s = {
     img: null as PhotoImage | null, before: undefined as PhotoEdit | undefined, work: { adj: {} } as PhotoEdit,
     baked: undefined as PhotoEdit['crop'], // crop currently applied to the pixels on canvas
@@ -103,6 +123,7 @@ export function initEditor({ c, commit, toast, pageRatio }: Deps) {
       img.orig = undefined;
     }
     img.setPositionByOrigin(center, 'center', 'center'); img.setCoords();
+    onGeometry?.(img);
     s.baked = clone(s.work.crop);
     hist = null; thumbs = {};
     render();
@@ -445,6 +466,7 @@ export function initEditor({ c, commit, toast, pageRatio }: Deps) {
     img.edit = isEdited(s.work) ? clone(s.work) : undefined;
     render(); close();
     if (dirty) commit();
+    onClose?.(img, true);
   };
   $('ed-cancel').onclick = async () => {
     const img = s.img;
@@ -456,6 +478,7 @@ export function initEditor({ c, commit, toast, pageRatio }: Deps) {
       img.setPositionByOrigin(s.center0, 'center', 'center'); img.setCoords();
     }
     applyEdit(img, s.before); close();
+    onClose?.(img, false);
   };
   $('ed-revert').onclick = () => {
     s.work = { adj: {} };
@@ -492,6 +515,6 @@ export function initEditor({ c, commit, toast, pageRatio }: Deps) {
     toast(imgs.length > 1 ? `Pasted onto ${imgs.length} photos` : 'Edits pasted');
   };
 
-  return { open, copyEdits, pasteEdits, isOpen: () => !!s.img };
+  return { open, copyEdits, pasteEdits, isOpen: () => !!s.img, work: () => clone(s.work) };
 }
 
