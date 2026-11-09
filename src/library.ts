@@ -29,7 +29,20 @@ const db = () => (dbp ??= new Promise<IDBDatabase | null>(res => {
 }));
 const req = <T,>(r: IDBRequest<T>) => new Promise<T>((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 const done = (tx: IDBTransaction) => new Promise<void>((res, rej) => { tx.oncomplete = () => res(); tx.onerror = tx.onabort = () => rej(tx.error); });
-const need = async () => { const d = await db(); if (!d) throw new Error('Photo storage is not available in this browser.'); return d; };
+// When IndexedDB is blocked (some private or embedded views), the library still works for this visit, in memory.
+type Store = 'photos' | 'files' | 'kv';
+const mem: Record<Store, Map<string, unknown>> = { photos: new Map(), files: new Map(), kv: new Map() };
+export const persistent = async () => !!(await db());
+const getAll = async (s: Store): Promise<unknown[]> => { const d = await db(); return d ? req<unknown[]>(d.transaction(s).objectStore(s).getAll()) : [...mem[s].values()]; };
+const getOne = async (s: Store, id: string): Promise<unknown> => { const d = await db(); return d ? req(d.transaction(s).objectStore(s).get(id)) : mem[s].get(id); };
+const write = async (puts: [Store, { id: string }][], dels: [Store, string][] = []) => {
+  const d = await db();
+  if (!d) { puts.forEach(([s, r]) => mem[s].set(r.id, r)); dels.forEach(([s, id]) => mem[s].delete(id)); return; }
+  const stores = [...new Set([...puts.map(p => p[0]), ...dels.map(x => x[0])])];
+  const tx = d.transaction(stores, 'readwrite');
+  puts.forEach(([s, r]) => tx.objectStore(s).put(r)); dels.forEach(([s, id]) => tx.objectStore(s).delete(id));
+  await done(tx);
+};
 
 // Records: plain, or { id, enc } when the profile has a passcode.
 const wrap = async <T extends { id: string }>(v: T, k = getKey()) => (k ? { id: v.id, enc: await seal(v, k) } : v);
@@ -47,53 +60,57 @@ const unwrapFile = async (r: { id: string; blob?: Blob; bytes?: ArrayBuffer; enc
 };
 
 export const listPhotos = async (): Promise<PhotoRec[]> => {
-  const d = await db();
-  if (!d) return [];
-  const raw = await req<unknown[]>(d.transaction('photos').objectStore('photos').getAll());
+  const raw = await getAll('photos');
   const rows = (await Promise.all(raw.map(r => unwrap<PhotoRec>(r).catch(() => undefined)))).filter((r): r is PhotoRec => !!r);
   return rows.sort((a, b) => b.added - a.added);
 };
-export const putPhoto = async (rec: PhotoRec) => {
-  const d = await need();
-  const w = await wrap(rec);
-  const tx = d.transaction('photos', 'readwrite'); tx.objectStore('photos').put(w); await done(tx);
-};
+export const putPhoto = async (rec: PhotoRec) => { await write([['photos', await wrap(rec)]]); };
 export const getFile = async (id: string, kind: Kind) => {
-  const d = await need();
-  const b = await unwrapFile(await req(d.transaction('files').objectStore('files').get(`${id}:${kind}`)));
+  const b = await unwrapFile(await getOne('files', `${id}:${kind}`) as Parameters<typeof unwrapFile>[0]);
   if (!b) throw new Error('missing photo');
   return b;
 };
 export const deletePhotos = async (ids: string[]) => {
-  const d = await need();
-  const tx = d.transaction(['photos', 'files'], 'readwrite');
-  for (const id of ids) { tx.objectStore('photos').delete(id); tx.objectStore('files').delete(`${id}:full`); tx.objectStore('files').delete(`${id}:preview`); }
-  await done(tx);
+  await write([], ids.flatMap(id => [['photos', id], ['files', `${id}:full`], ['files', `${id}:preview`]] as [Store, string][]));
 };
 
 // --- importing -------------------------------------------------------------------
-const toBlob = (cv: HTMLCanvasElement, q: number) => new Promise<Blob>((res, rej) => cv.toBlob(b => (b ? res(b) : rej(new Error('encode failed'))), 'image/jpeg', q));
+const toBlob = (cv: HTMLCanvasElement, q: number) => new Promise<Blob>((res, rej) => cv.toBlob(b => (b ? res(b) : rej(new Error('the phone ran out of memory encoding the photo'))), 'image/jpeg', q));
 const scaled = (src: CanvasImageSource, w: number, h: number, max: number) => {
   const k = Math.min(1, max / Math.max(w, h));
   const cv = Object.assign(document.createElement('canvas'), { width: Math.round(w * k), height: Math.round(h * k) });
   cv.getContext('2d')!.drawImage(src, 0, 0, cv.width, cv.height);
   return cv;
 };
+// iOS Safari caps total canvas memory and frees it lazily; shrinking a canvas to 0×0 frees it now.
+const free = (...cvs: HTMLCanvasElement[]) => cvs.forEach(c => { c.width = 0; c.height = 0; });
 const newId = () => `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
+// Decode with EXIF rotation applied. createImageBitmap first; an <img> as the fallback for browsers or formats it rejects.
+const decode = async (file: File): Promise<{ src: CanvasImageSource; w: number; h: number; done: () => void }> => {
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions);
+    return { src: bmp, w: bmp.width, h: bmp.height, done: () => bmp.close?.() };
+  } catch {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    try { img.src = url; await img.decode(); } catch { URL.revokeObjectURL(url); throw new Error("this browser can't open that image format (try JPG or PNG)"); }
+    return { src: img, w: img.naturalWidth, h: img.naturalHeight, done: () => URL.revokeObjectURL(url) };
+  }
+};
+
 export const addPhoto = async (file: File): Promise<PhotoRec> => {
-  const bmp = await createImageBitmap(file); // applies EXIF rotation
-  const full = scaled(bmp, bmp.width, bmp.height, FULL_PX), prev = scaled(full, full.width, full.height, PREVIEW_PX), th = scaled(prev, prev.width, prev.height, THUMB_PX);
-  bmp.close?.();
+  const im = await decode(file);
+  const full = scaled(im.src, im.w, im.h, FULL_PX);
+  im.done();
+  const prev = scaled(full, full.width, full.height, PREVIEW_PX), th = scaled(prev, prev.width, prev.height, THUMB_PX);
   const id = newId(), now = Date.now();
   const rec: PhotoRec = { id, name: file.name.replace(/\.[^.]+$/, '').slice(0, 80) || 'Photo', added: now, updated: now, taken: file.lastModified || undefined,
     w: full.width, h: full.height, pw: prev.width, ph: prev.height, thumb: th.toDataURL('image/jpeg', 0.78) };
-  const [fb, pb] = await Promise.all([toBlob(full, 0.92), toBlob(prev, 0.9)]);
-  const d = await need();
-  const [fr, pr, rr] = await Promise.all([wrapFile(`${id}:full`, fb), wrapFile(`${id}:preview`, pb), wrap(rec)]);
-  const tx = d.transaction(['photos', 'files'], 'readwrite');
-  tx.objectStore('files').put(fr); tx.objectStore('files').put(pr); tx.objectStore('photos').put(rr);
-  await done(tx);
+  let fb: Blob, pb: Blob;
+  try { fb = await toBlob(full, 0.92); pb = await toBlob(prev, 0.9); } finally { free(full, prev, th); }
+  if (!rec.thumb.startsWith('data:image/jpeg')) throw new Error('the phone ran out of memory drawing the photo');
+  await write([['files', await wrapFile(`${id}:full`, fb)], ['files', await wrapFile(`${id}:preview`, pb)], ['photos', await wrap(rec)]]);
   return rec;
 };
 
@@ -139,14 +156,13 @@ export const renderEdited = async (rec: PhotoRec, edit: PhotoEdit | undefined, p
   };
   return size === 'full' ? withBigBackend(run) : run();
 };
-export const exportJpeg = async (rec: PhotoRec, presets: Preset[], edit = rec.edit) => toBlob(await renderEdited(rec, edit, presets, 'full'), 0.92);
-export const refreshThumb = async (rec: PhotoRec, presets: Preset[]) => { rec.thumb = (await renderEdited(rec, rec.edit, presets, 'thumb')).toDataURL('image/jpeg', 0.78); };
+export const exportJpeg = async (rec: PhotoRec, presets: Preset[], edit = rec.edit) => { const cv = await renderEdited(rec, edit, presets, 'full'); try { return await toBlob(cv, 0.92); } finally { free(cv); } };
+export const refreshThumb = async (rec: PhotoRec, presets: Preset[]) => { const cv = await renderEdited(rec, rec.edit, presets, 'thumb'); rec.thumb = cv.toDataURL('image/jpeg', 0.78); free(cv); };
 
 // --- presets (one record) ------------------------------------------------------------
 export const loadPresetList = async (): Promise<unknown[] | null> => {
-  const d = await db();
-  if (!d) return null;
-  const v = await unwrap<{ id: string; list: unknown[] }>(await req(d.transaction('kv').objectStore('kv').get('presets'))).catch(() => undefined);
+  if (!(await db())) return null;
+  const v = await unwrap<{ id: string; list: unknown[] }>(await getOne('kv', 'presets')).catch(() => undefined);
   return v ? v.list : null;
 };
 export const savePresetList = async (list: unknown[]) => {

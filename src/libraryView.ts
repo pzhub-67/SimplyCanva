@@ -2,7 +2,7 @@
 // flag, apply a preset, copy/paste settings, save JPGs or put them into a design. Presets can be managed from here too.
 import { saveFile } from './download';
 import { allPresets, getPresets, presetGroupOf, setPresets } from './editor';
-import { PhotoRec, addPhoto, deletePhotos, exportJpeg, listPhotos, putPhoto, refreshThumb } from './library';
+import { PhotoRec, addPhoto, deletePhotos, exportJpeg, listPhotos, persistent, putPhoto, refreshThumb } from './library';
 import { PhotoEdit, Preset, isEdited } from './photoModel';
 import { importPresetFiles, makeZip, presetsZip } from './xmp';
 
@@ -30,7 +30,7 @@ export function initLibrary({ open, addToDesign, toast, back }: Deps) {
       const b = el('button', { className: 'lcell' });
       b.setAttribute('aria-label', `${p.name}${p.pick ? ', picked' : ''}${isEdited(p.edit) ? ', edited' : ''}`);
       if (sel) b.setAttribute('aria-pressed', String(sel.has(p.id)));
-      b.append(el('img', { src: p.thumb, alt: '', loading: 'lazy', decoding: 'async' }));
+      b.append(el('img', { src: p.thumb, alt: '' }));
       if (p.pick) b.append(el('span', { className: 'flag', textContent: '⚑' }));
       if (isEdited(p.edit)) b.append(el('span', { className: 'dot' }));
       const pre = p.edit?.filter && allPresets().find(x => x.id === p.edit!.filter!.id);
@@ -90,13 +90,16 @@ export function initLibrary({ open, addToDesign, toast, back }: Deps) {
   $<HTMLInputElement>('lib-add').onchange = async e => {
     const input = e.target as HTMLInputElement, files = [...(input.files ?? [])].filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|avif|gif)$/i.test(f.name));
     input.value = '';
-    let ok = 0, bad = 0;
+    if (!files.length) { toast(input.files?.length ? 'Those files are not photos.' : 'No photos were chosen.'); return; }
+    let ok = 0, bad = 0, why = '';
+    filter = 'all'; // new photos must be visible
     for (const f of files) {
       $('lib-count').textContent = `Importing ${ok + bad + 1} of ${files.length}…`;
-      try { photos.unshift(await addPhoto(f)); ok++; } catch { bad++; }
+      try { photos.unshift(await addPhoto(f)); ok++; } catch (err) { bad++; why = (err as Error)?.message || String(err); console.error('import', f.name, f.type, f.size, err); }
       render();
     }
-    toast(bad ? `Added ${ok}. ${bad} could not be read (this browser may not open that format; try JPG or PNG).` : `Added ${ok} photo${ok === 1 ? '' : 's'}.`);
+    const kept = await persistent();
+    toast(bad ? `Added ${ok} of ${files.length}. ${bad} failed: ${why}.` : `Added ${ok} photo${ok === 1 ? '' : 's'}.${kept ? '' : ' This view cannot store photos, so they last until you close it.'}`);
   };
   document.querySelectorAll<HTMLElement>('[data-lib-filter]').forEach(b => { b.onclick = () => { filter = b.dataset.libFilter as Filter; render(); }; });
   $('lib-select').onclick = () => { sel = sel ? null : new Set(); render(); };
