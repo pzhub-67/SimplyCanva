@@ -33,14 +33,17 @@ export function initLibrary({ open, addToDesign, toast, back }: Deps) {
       b.append(el('img', { src: p.thumb, alt: '', loading: 'lazy', decoding: 'async' }));
       if (p.pick) b.append(el('span', { className: 'flag', textContent: '⚑' }));
       if (isEdited(p.edit)) b.append(el('span', { className: 'dot' }));
+      const pre = p.edit?.filter && allPresets().find(x => x.id === p.edit!.filter!.id);
+      if (pre) b.append(el('span', { className: 'ptag', textContent: pre.name }));
       b.onclick = () => {
         if (!sel) { open(p); return; }
         if (sel.has(p.id)) sel.delete(p.id); else sel.add(p.id);
         render();
       };
-      // press and hold starts selecting
-      let t = 0;
-      b.onpointerdown = () => { t = window.setTimeout(() => { if (!sel) { sel = new Set([p.id]); render(); b.dataset.held = '1'; } }, 450); };
+      // Press and hold (a long, still press) starts selecting. A firm tap must still open the photo.
+      let t = 0, x0 = 0, y0 = 0;
+      b.onpointerdown = e => { x0 = e.clientX; y0 = e.clientY; t = window.setTimeout(() => { if (!sel) { sel = new Set([p.id]); render(); b.dataset.held = '1'; navigator.vibrate?.(15); } }, 700); };
+      b.onpointermove = e => { if (Math.hypot(e.clientX - x0, e.clientY - y0) > 10) clearTimeout(t); };
       b.onpointerup = b.onpointerleave = b.onpointercancel = () => clearTimeout(t);
       b.addEventListener('click', e => { if (b.dataset.held) { e.stopImmediatePropagation(); delete b.dataset.held; } }, true);
       return b;
@@ -73,8 +76,15 @@ export function initLibrary({ open, addToDesign, toast, back }: Deps) {
   // Write edits to several photos and refresh their thumbnails.
   const apply = async (recs: PhotoRec[], fn: (r: PhotoRec) => void, msg: string) => {
     const ps = allPresets();
-    for (const r of recs) { fn(r); r.updated = Date.now(); await refreshThumb(r, ps).catch(() => undefined); await putPhoto(r); }
-    render(); toast(msg);
+    let failed = 0;
+    for (const r of recs) {
+      fn(r); r.updated = Date.now();
+      try { await refreshThumb(r, ps); } catch (e) { failed++; console.error('thumb', e); }
+      await putPhoto(r);
+    }
+    sel = null; // done: back to the grid, so a tap opens a photo again
+    render();
+    toast(failed ? `${msg} ${failed} preview${failed === 1 ? '' : 's'} could not be redrawn; open the photo to see it.` : `${msg} Tap a photo to see it.`);
   };
 
   $<HTMLInputElement>('lib-add').onchange = async e => {

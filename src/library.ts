@@ -34,11 +34,16 @@ const need = async () => { const d = await db(); if (!d) throw new Error('Photo 
 // Records: plain, or { id, enc } when the profile has a passcode.
 const wrap = async <T extends { id: string }>(v: T, k = getKey()) => (k ? { id: v.id, enc: await seal(v, k) } : v);
 const unwrap = async <T,>(r: unknown, k = getKey()): Promise<T | undefined> => (r === undefined ? undefined : isSealed(r) ? openEnc<T>(r.enc, k) : (r as T));
-// Files: { id, blob } plain, or { id, enc, type } encrypted.
-const wrapFile = async (id: string, blob: Blob, k = getKey()) => (k ? { id, enc: await sealBytes(await blob.arrayBuffer(), k), type: blob.type } : { id, blob });
-const unwrapFile = async (r: { id: string; blob?: Blob; enc?: Enc; type?: string } | undefined, k = getKey()) => {
+// Files: { id, bytes, type } plain, or { id, enc, type } encrypted. Raw bytes, not Blobs: WebKit (Safari) can refuse
+// to store Blobs in IndexedDB, but every browser stores an ArrayBuffer. Older { id, blob } rows still read.
+const wrapFile = async (id: string, blob: Blob, k = getKey()) => {
+  const bytes = await blob.arrayBuffer();
+  return k ? { id, enc: await sealBytes(bytes, k), type: blob.type } : { id, bytes, type: blob.type };
+};
+const unwrapFile = async (r: { id: string; blob?: Blob; bytes?: ArrayBuffer; enc?: Enc; type?: string } | undefined, k = getKey()) => {
   if (!r) return undefined;
-  return r.enc ? new Blob([await openBytes(r.enc, k)], { type: r.type || 'image/jpeg' }) : r.blob;
+  if (r.enc) return new Blob([await openBytes(r.enc, k)], { type: r.type || 'image/jpeg' });
+  return r.bytes ? new Blob([r.bytes], { type: r.type || 'image/jpeg' }) : r.blob;
 };
 
 export const listPhotos = async (): Promise<PhotoRec[]> => {

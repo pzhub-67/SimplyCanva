@@ -44,6 +44,8 @@ with sync_playwright() as p:
     print('flags', pg.locator('.lcell .flag').count())
     pg.click('[data-lib-act="preset"]'); pg.locator('#lib-sheet-list .opt', has_text='Noir').click(); pg.wait_for_timeout(2500)
     print('edited dots after batch', pg.locator('.lcell .dot').count())
+    print('select mode ended', pg.inner_text('#lib-select'), 'tags', pg.locator('.lcell .ptag').all_inner_texts())
+    pg.click('#lib-select'); pg.locator('.lcell').nth(0).click(); pg.locator('.lcell').nth(1).click()
     pg.screenshot(path='/tmp/claude-0/l-grid.png')
     with pg.expect_download() as d: pg.click('[data-lib-act="save"]')
     z = zipfile.ZipFile(d.value.path()); print('zip of jpgs', z.namelist())
